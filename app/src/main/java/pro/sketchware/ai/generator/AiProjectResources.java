@@ -188,9 +188,25 @@ final class AiProjectResources {
      * change, and the names of the user's resources.
      */
     void read(@NonNull String sc_id, @NonNull AiProjectSpec spec) {
-        for (ProjectResourceBean image : loadImages(sc_id).b) {
+        kC resources = loadImages(sc_id);
+        for (ProjectResourceBean image : resources.b) {
             if (image.resName != null) {
                 spec.projectImages.add(image.resName);
+            }
+        }
+        // Sounds (R.raw.name) and fonts (assets/fonts/name.ttf) the user added in their managers
+        if (resources.c != null) {
+            for (ProjectResourceBean sound : resources.c) {
+                if (sound.resName != null) {
+                    spec.projectSounds.add(sound.resName);
+                }
+            }
+        }
+        if (resources.d != null) {
+            for (ProjectResourceBean font : resources.d) {
+                if (font.resName != null) {
+                    spec.projectFonts.add(font.resName);
+                }
             }
         }
         File root = new File(paths.getPathResource(sc_id));

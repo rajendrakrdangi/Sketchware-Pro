@@ -58,6 +58,11 @@ public final class AiProjectFiles {
                         CodeFormatter.formatXml(resource.content)));
             }
         }
+        if (spec.assets != null) {
+            for (AiProjectSpec.AssetFile asset : spec.assets) {
+                files.add(new GeneratedFile("assets/" + asset.path, "Data file", asset.content));
+            }
+        }
         if (spec.javaClasses != null) {
             for (AiProjectSpec.JavaClass javaClass : spec.javaClasses) {
                 files.add(new GeneratedFile("java/" + javaClass.name + ".java", "Helper class", javaClass.code));

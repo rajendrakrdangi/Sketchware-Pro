@@ -77,6 +77,35 @@ public class AiResponseParser {
      */
     @NonNull
     public AiProjectSpec parse(@NonNull String response) throws AiSpecException {
+        return parse(response, null);
+    }
+
+    /**
+     * @param project The project being changed, whose images, sounds, fonts, assets, resources and
+     *                Java classes are facts: they're taken from it, not from what the model echoed.
+     */
+    @NonNull
+    public AiProjectSpec parse(@NonNull String response, @androidx.annotation.Nullable AiProjectSpec project) throws AiSpecException {
+        AiProjectSpec spec = parseJson(response);
+        if (spec.isReply()) {
+            return spec;
+        }
+        if (project != null) {
+            spec.projectImages = copy(project.projectImages);
+            spec.projectResources = copy(project.projectResources);
+            spec.projectJavaClasses = copy(project.projectJavaClasses);
+            spec.projectAssets = copy(project.projectAssets);
+            spec.projectSounds = copy(project.projectSounds);
+            spec.projectFonts = copy(project.projectFonts);
+        }
+        return validate(spec);
+    }
+
+    private static java.util.List<String> copy(@androidx.annotation.Nullable java.util.List<String> list) {
+        return list == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(list);
+    }
+
+    private AiProjectSpec parseJson(@NonNull String response) throws AiSpecException {
         if (response.indexOf('{') < 0 && !response.trim().isEmpty()) {
             // Models sometimes answer small talk in plain text, despite being asked for JSON
             AiProjectSpec reply = new AiProjectSpec();
@@ -93,10 +122,10 @@ public class AiResponseParser {
         if (spec == null) {
             throw new AiSpecException("It is empty.");
         }
-        if (spec.isReply()) {
-            return spec;
-        }
+        return spec;
+    }
 
+    private AiProjectSpec validate(AiProjectSpec spec) throws AiSpecException {
         normalizeMetadata(spec);
         spec.permissions = normalizePermissions(spec.permissions);
         spec.screens = nonNull(spec.screens);

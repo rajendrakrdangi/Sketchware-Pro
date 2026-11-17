@@ -123,6 +123,33 @@ public final class AiChangeSummary {
         if (!changedResources.isEmpty()) {
             lines.add("Resource files changed: " + names(changedResources));
         }
+        Map<String, String> oldAssets = new LinkedHashMap<>();
+        if (before != null && before.assets != null) {
+            for (AiProjectSpec.AssetFile file : before.assets) {
+                oldAssets.put(file.path, file.content);
+            }
+        }
+        List<String> addedAssets = new ArrayList<>();
+        List<String> changedAssets = new ArrayList<>();
+        if (after.assets != null) {
+            for (AiProjectSpec.AssetFile file : after.assets) {
+                String old = oldAssets.remove(file.path);
+                if (old == null) {
+                    addedAssets.add(file.path);
+                } else if (!normalize(old).equals(normalize(file.content))) {
+                    changedAssets.add(file.path);
+                }
+            }
+        }
+        if (!addedAssets.isEmpty()) {
+            lines.add("Data files added: " + names(addedAssets));
+        }
+        if (!changedAssets.isEmpty()) {
+            lines.add("Data files changed: " + names(changedAssets));
+        }
+        if (!oldAssets.isEmpty()) {
+            lines.add("Data files removed: " + names(new ArrayList<>(oldAssets.keySet())));
+        }
         Map<String, String> oldClasses = new LinkedHashMap<>();
         if (before != null && before.javaClasses != null) {
             for (AiProjectSpec.JavaClass javaClass : before.javaClasses) {

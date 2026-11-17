@@ -54,7 +54,8 @@ public final class AiProjectPrompt {
               "admob": {"enabled": false},
               "icons": [{"name": "ic_add", "icon": "add", "style": "round", "color": "#FFFFFF"}],
               "resources": [{"path": "drawable/ai_card_bg.xml", "content": "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\"><solid android:color=\"#FFFFFF\"/><corners android:radius=\"16dp\"/></shape>"}],
-              "javaClasses": []
+              "javaClasses": [],
+              "assets": []
             }
 
             - summary (required, write it FIRST): 1-3 sentences for someone who can't code, about what the app \
@@ -146,6 +147,26 @@ public final class AiProjectPrompt {
             can't use a screen's widgets; pass what they need as parameters.
             - When changing an app, keep its "javaClasses" unless the change replaces them; \
             "projectJavaClasses" is read-only.
+
+            # Data files, sounds and fonts
+            - assets: optional text data files the app reads, each {"path": "ai_questions.json", \
+            "content": "..."}. Names start with ai_ and end in .json, .txt, .csv, .html, .md or .xml; \
+            at most 10, each under 150,000 characters. Use them for starter content that would be long \
+            in code: quiz questions, word lists, recipes, help pages. A .json file must be strict JSON.
+            - Read one in code: String json = ""; try { java.io.InputStream stream = \
+            getAssets().open("ai_questions.json"); byte[] bytes = new byte[stream.available()]; \
+            stream.read(bytes); stream.close(); json = new String(bytes, "UTF-8"); } catch (Exception e) { } \
+            then parse it with org.json. A WebView can show one with \
+            loadUrl("file:///android_asset/ai_help.html"). Every opened asset must be in "assets" or \
+            "projectAssets".
+            - projectSounds are the sounds the user added (read-only). Play one with \
+            MediaPlayer.create(getApplicationContext(), R.raw.name).start(); or a SoundPool. You can't \
+            add sounds: with none listed, use android.media.ToneGenerator for beeps, or no sound.
+            - projectFonts are the fonts the user added (read-only): \
+            NAME.setTypeface(android.graphics.Typeface.createFromAsset(getAssets(), "fonts/name.ttf")); \
+            You can't add fonts; otherwise use android.graphics.Typeface.DEFAULT_BOLD, SERIF or MONOSPACE.
+            - When changing an app, keep its "assets" unless the change replaces them; "projectAssets", \
+            "projectSounds" and "projectFonts" are read-only.
 
             # Code
             - Every "code" and "onCreate" value is a block of Java statements that gets placed inside \

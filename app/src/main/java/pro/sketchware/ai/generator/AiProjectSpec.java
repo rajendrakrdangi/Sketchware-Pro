@@ -84,6 +84,36 @@ public class AiProjectSpec {
     public List<JavaClass> javaClasses = new ArrayList<>();
 
     /**
+     * Text data files the AI owns in the app's assets, e.g. starter questions as JSON. Their file
+     * names start with "ai_"; the user's own assets are never touched.
+     */
+    public List<AssetFile> assets = new ArrayList<>();
+
+    /**
+     * Read-only: the project's own asset files, as paths inside assets, e.g. "data/words.txt".
+     */
+    public List<String> projectAssets = new ArrayList<>();
+
+    /**
+     * Read-only: the sounds of the project's sound manager, used as <code>R.raw.name</code>.
+     */
+    public List<String> projectSounds = new ArrayList<>();
+
+    /**
+     * Read-only: the fonts of the project's font manager, used from
+     * <code>"fonts/name.ttf"</code> in the assets.
+     */
+    public List<String> projectFonts = new ArrayList<>();
+
+    public static class AssetFile {
+        /**
+         * Path inside assets, e.g. "ai_questions.json".
+         */
+        public String path;
+        public String content;
+    }
+
+    /**
      * Read-only: the names of the project's own Java classes in its Java folder.
      */
     public List<String> projectJavaClasses = new ArrayList<>();

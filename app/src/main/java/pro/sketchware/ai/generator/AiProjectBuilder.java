@@ -505,6 +505,10 @@ public class AiProjectBuilder {
             listener.onProgress(AiProjectGenerator.Stage.SAVING_FILES, "Adding " + spec.javaClasses.size() + " helper classes");
         }
         AiJavaClasses.write(sc_id, spec);
+        if (listener != null && !spec.assets.isEmpty()) {
+            listener.onProgress(AiProjectGenerator.Stage.SAVING_FILES, "Adding " + spec.assets.size() + " data files");
+        }
+        AiProjectAssets.write(sc_id, spec);
 
         // Sketchware offers to restore unsaved editor state from here, which would undo this
         new oB().b(wq.a(sc_id));

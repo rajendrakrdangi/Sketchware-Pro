@@ -120,6 +120,8 @@ public class AiProjectReader {
         new AiProjectResources(context).read(sc_id, spec);
         // Helper classes in the Java folder: the AI's own to keep or change, the user's to use
         AiJavaClasses.read(sc_id, spec);
+        // Data files in the assets: the AI's own to keep or change, the user's to use
+        AiProjectAssets.read(sc_id, spec);
         return new Result(sc_id, spec, unsupported);
     }
 

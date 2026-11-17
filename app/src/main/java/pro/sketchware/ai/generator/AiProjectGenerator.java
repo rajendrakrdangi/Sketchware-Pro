@@ -300,7 +300,7 @@ public class AiProjectGenerator {
             AiProjectSpec spec;
             try {
                 listener.onProgress(Stage.BUILDING, null);
-                spec = parser.parse(answer);
+                spec = parser.parse(answer, beforeSpec);
                 if (spec.isReply()) {
                     if (lastBuilt != null) {
                         // Gave up fixing the compile errors: what was built is all there is
