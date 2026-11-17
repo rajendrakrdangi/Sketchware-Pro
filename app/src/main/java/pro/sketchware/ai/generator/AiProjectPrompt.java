@@ -53,7 +53,8 @@ public final class AiProjectPrompt {
               "itemLayouts": [{"name": "note_item", "layout": "<LinearLayout ...>...</LinearLayout>"}],
               "admob": {"enabled": false},
               "icons": [{"name": "ic_add", "icon": "add", "style": "round", "color": "#FFFFFF"}],
-              "resources": [{"path": "drawable/ai_card_bg.xml", "content": "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\"><solid android:color=\"#FFFFFF\"/><corners android:radius=\"16dp\"/></shape>"}]
+              "resources": [{"path": "drawable/ai_card_bg.xml", "content": "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\"><solid android:color=\"#FFFFFF\"/><corners android:radius=\"16dp\"/></shape>"}],
+              "javaClasses": []
             }
 
             - summary (required, write it FIRST): 1-3 sentences for someone who can't code, about what the app \
@@ -130,6 +131,21 @@ public final class AiProjectPrompt {
             "projectImages"/"projectResources", or colorPrimary, colorPrimaryDark, colorAccent.
             - When changing an app, keep its "icons" and "resources" unless the change replaces them; \
             "projectImages" and "projectResources" are read-only.
+
+            # Helper classes
+            - javaClasses: optional plain Java classes the app gets in its Java folder, each \
+            {"name": "QuizStore", "code": "public class QuizStore { ... }"}. Use them for data models \
+            (e.g. a Question with its text, choices and answer), storage helpers and shared logic that \
+            several screens use, instead of repeating code. Use at most 8, and keep screen-specific code \
+            in the screens.
+            - Write the whole class without a package line (the app's package is added); add the imports \
+            it needs. A class name must not be a screen's activity name (MainActivity, QuizActivity...), \
+            a class Sketchware adds (SketchwareUtil, FileUtil, RequestNetwork) or in \
+            "projectJavaClasses". Java 8 at most, like the screens.
+            - Screens use them directly, e.g. QuizStore.save(getApplicationContext(), result);. They \
+            can't use a screen's widgets; pass what they need as parameters.
+            - When changing an app, keep its "javaClasses" unless the change replaces them; \
+            "projectJavaClasses" is read-only.
 
             # Code
             - Every "code" and "onCreate" value is a block of Java statements that gets placed inside \

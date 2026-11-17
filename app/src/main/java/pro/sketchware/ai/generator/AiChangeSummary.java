@@ -123,6 +123,33 @@ public final class AiChangeSummary {
         if (!changedResources.isEmpty()) {
             lines.add("Resource files changed: " + names(changedResources));
         }
+        Map<String, String> oldClasses = new LinkedHashMap<>();
+        if (before != null && before.javaClasses != null) {
+            for (AiProjectSpec.JavaClass javaClass : before.javaClasses) {
+                oldClasses.put(javaClass.name, javaClass.code);
+            }
+        }
+        List<String> addedClasses = new ArrayList<>();
+        List<String> changedClasses = new ArrayList<>();
+        if (after.javaClasses != null) {
+            for (AiProjectSpec.JavaClass javaClass : after.javaClasses) {
+                String old = oldClasses.remove(javaClass.name);
+                if (old == null) {
+                    addedClasses.add(javaClass.name);
+                } else if (!normalize(old).equals(normalize(javaClass.code))) {
+                    changedClasses.add(javaClass.name);
+                }
+            }
+        }
+        if (!addedClasses.isEmpty()) {
+            lines.add("Helper classes added: " + names(addedClasses));
+        }
+        if (!changedClasses.isEmpty()) {
+            lines.add("Helper classes changed: " + names(changedClasses));
+        }
+        if (!oldClasses.isEmpty()) {
+            lines.add("Helper classes removed: " + names(new ArrayList<>(oldClasses.keySet())));
+        }
         if (!oldResources.isEmpty()) {
             lines.add("Resource files removed: " + names(new ArrayList<>(oldResources.keySet())));
         }

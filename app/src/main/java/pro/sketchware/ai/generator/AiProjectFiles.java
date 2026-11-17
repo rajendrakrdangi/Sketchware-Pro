@@ -58,6 +58,11 @@ public final class AiProjectFiles {
                         CodeFormatter.formatXml(resource.content)));
             }
         }
+        if (spec.javaClasses != null) {
+            for (AiProjectSpec.JavaClass javaClass : spec.javaClasses) {
+                files.add(new GeneratedFile("java/" + javaClass.name + ".java", "Helper class", javaClass.code));
+            }
+        }
         if (spec.icons != null && !spec.icons.isEmpty()) {
             StringBuilder icons = new StringBuilder();
             for (AiProjectSpec.Icon icon : spec.icons) {

@@ -118,6 +118,8 @@ public class AiProjectReader {
         }
         // Images and resource files, so an edit can use and keep them
         new AiProjectResources(context).read(sc_id, spec);
+        // Helper classes in the Java folder: the AI's own to keep or change, the user's to use
+        AiJavaClasses.read(sc_id, spec);
         return new Result(sc_id, spec, unsupported);
     }
 

@@ -105,6 +105,7 @@ public class AiResponseParser {
         validateScreens(spec);
         validateItemLayouts(spec);
         AiResourceRules.validate(spec);
+        AiJavaClasses.validate(spec);
         normalizeAdmob(spec);
         spec.summary = isBlank(spec.summary) ? null : spec.summary.trim();
         List<String> highlights = new ArrayList<>();

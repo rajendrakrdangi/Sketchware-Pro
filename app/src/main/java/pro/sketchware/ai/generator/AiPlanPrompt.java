@@ -18,12 +18,17 @@ public final class AiPlanPrompt {
             2. Which features make it complete and pleasant to use? Go beyond the obvious minimum where it \
             clearly helps, and say for each feature why the user needs it.
             3. Which screens does it need? For each: what it shows, how it looks (layout, cards, colors, \
-            spacing, icons as text or emoji) and how the user gets there.
+            spacing, icons) and how the user gets there.
             4. How does it behave while being used? For interactive parts, like answering quiz questions, \
             describe the feedback, progress, results, and what happens with empty input or no data.
             5. What does it store, and what must still be there after the app is closed?
-            Plan only what Sketchware Pro can build with what it offers (listed below); no servers or \
-            accounts unless the user asks for them.
+            6. What can't Sketchware Pro build as asked, with what it offers (listed below)? For example \
+            video effects and exporting edited videos, real-time multiplayer, or anything needing a server \
+            of its own. Be honest: list each in "limits" with what the app does instead (a simpler version \
+            that does work), so the user knows before anything is built. Leave "limits" empty when all of \
+            it can be built. Never plan something you listed there.
+            Plan only what Sketchware Pro can build with what it offers; no servers or accounts unless the \
+            user asks for them.
 
             Then decide whether something important is unclear. Ask only questions whose answers really \
             change what you build: at most 4, each with 2-5 short options to tap. Set "multiple" when \
@@ -36,7 +41,7 @@ public final class AiPlanPrompt {
             Answer with one JSON object and nothing else:
             {"understanding": "...", "features": [{"name": "...", "why": "..."}], \
             "screens": [{"name": "...", "purpose": "...", "ui": "..."}], "flow": "...", "design": "...", \
-            "data": "...", "questions": [{"question": "...", "options": ["...", "..."], \
+            "data": "...", "limits": [{"what": "...", "instead": "..."}], "questions": [{"question": "...", "options": ["...", "..."], \
             "multiple": false, "allowCustom": true}]}
             """;
 

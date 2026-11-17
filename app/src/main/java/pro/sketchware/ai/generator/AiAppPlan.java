@@ -34,6 +34,11 @@ public class AiAppPlan {
      * What the app stores and keeps between launches.
      */
     public String data;
+    /**
+     * Parts of the request Sketchware Pro can't build, each with what the app does instead, so the
+     * user knows before anything is built.
+     */
+    public List<Limit> limits = new ArrayList<>();
     public List<Question> questions = new ArrayList<>();
 
     public static class Feature {
@@ -45,6 +50,17 @@ public class AiAppPlan {
         public String name;
         public String purpose;
         public String ui;
+    }
+
+    public static class Limit {
+        /**
+         * What can't be built, e.g. "Exporting edited videos".
+         */
+        public String what;
+        /**
+         * What the app does instead, or why it isn't possible.
+         */
+        public String instead;
     }
 
     public static class Question {
@@ -81,6 +97,13 @@ public class AiAppPlan {
         }
         plan.features = clean(plan.features);
         plan.screens = clean(plan.screens);
+        List<Limit> limits = new ArrayList<>();
+        for (Limit limit : clean(plan.limits)) {
+            if (!text(limit.what).isEmpty()) {
+                limits.add(limit);
+            }
+        }
+        plan.limits = limits;
         List<Question> questions = new ArrayList<>();
         for (Question question : clean(plan.questions)) {
             if (question.question == null || question.question.trim().isEmpty() || questions.size() >= MAX_QUESTIONS) {
@@ -168,6 +191,16 @@ public class AiAppPlan {
         appendSection(out, "How it works", flow);
         appendSection(out, "Look and feel", design);
         appendSection(out, "What it saves", data);
+        if (limits != null && !limits.isEmpty()) {
+            out.append("\n\n**What I can't build**");
+            for (Limit limit : limits) {
+                out.append("\n- **").append(text(limit.what)).append("**");
+                String instead = text(limit.instead);
+                if (!instead.isEmpty()) {
+                    out.append(": ").append(instead);
+                }
+            }
+        }
         return out.toString();
     }
 
@@ -176,7 +209,11 @@ public class AiAppPlan {
      */
     @NonNull
     public String toBuildInstructions() {
-        return toMarkdown().replace("**My plan for your app**", "Plan agreed with the user:");
+        String instructions = toMarkdown().replace("**My plan for your app**", "Plan agreed with the user:");
+        if (limits != null && !limits.isEmpty()) {
+            instructions += "\n\nDon't attempt what's listed under \"What I can't build\"; build what it says instead.";
+        }
+        return instructions;
     }
 
     private static void appendSection(StringBuilder out, String title, @Nullable String body) {

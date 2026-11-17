@@ -322,8 +322,10 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         binding.newChat.setEnabled(!busy);
         binding.attachProject.setEnabled(!busy);
         binding.attachedProject.setCloseIconVisible(!busy);
-        // Suggestions start new apps, so they make no sense while a project is attached
-        boolean showSuggestions = !busy && viewModel.getAttachedProject().getValue() == null;
+        // Suggestions start new apps, so they only belong on an empty chat with no project attached
+        List<ChatItem> items = viewModel.getItems().getValue();
+        boolean showSuggestions = !busy && viewModel.getAttachedProject().getValue() == null
+                && (items == null || items.isEmpty());
         binding.suggestionsScroll.setVisibility(showSuggestions ? View.VISIBLE : View.GONE);
     }
 
@@ -443,9 +445,9 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
             if (binding == null || items.isEmpty()) {
                 return;
             }
-            if (items.size() != previousCount) {
-                binding.messages.smoothScrollToPosition(items.size() - 1);
-            } else if (atEnd) {
+            // A smooth scroll loses its target when rows above change height (an answered
+            // question card shrinks), so jump to the end and then to the bottom of the last row
+            if (items.size() != previousCount || atEnd) {
                 binding.messages.post(() -> {
                     if (binding != null) {
                         binding.messages.scrollToPosition(items.size() - 1);
@@ -455,6 +457,7 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
             }
         });
         binding.welcome.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        updateComposer();
     }
 
     @Override

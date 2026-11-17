@@ -78,6 +78,27 @@ public class AiProjectSpec {
      */
     public List<String> projectResources = new ArrayList<>();
 
+    /**
+     * Helper classes the AI owns in the project's Java folder, e.g. a data model or a store.
+     */
+    public List<JavaClass> javaClasses = new ArrayList<>();
+
+    /**
+     * Read-only: the names of the project's own Java classes in its Java folder.
+     */
+    public List<String> projectJavaClasses = new ArrayList<>();
+
+    public static class JavaClass {
+        /**
+         * The class name, e.g. "QuizStore".
+         */
+        public String name;
+        /**
+         * The whole class, without a package line.
+         */
+        public String code;
+    }
+
     public static class Icon {
         /**
          * The drawable's name in the project, e.g. "ic_add".
