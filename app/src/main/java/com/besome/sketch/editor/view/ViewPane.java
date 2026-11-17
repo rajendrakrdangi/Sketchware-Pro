@@ -444,6 +444,15 @@ public class ViewPane extends RelativeLayout {
                     layoutParams.addRule(RelativeLayout.CENTER_IN_PARENT);
                 }
                 view.setLayoutParams(layoutParams);
+                if (viewBean.getClassInfo().b("FloatingActionButton") && view instanceof FloatingActionButton fabView) {
+                    String chosenImage = viewBean.image == null ? null : viewBean.image.resName;
+                    if (ViewBean.hasNoImageChosen(chosenImage)) {
+                        // Same default icon the built app gets, see Ox#writeFabView
+                        fabView.setImageResource(ViewBean.FAB_DEFAULT_ICON);
+                    } else if ("NONE".equals(chosenImage)) {
+                        fabView.setImageDrawable(null);
+                    }
+                }
                 if (viewBean.getClassInfo().b("FloatingActionButton") && (imageBean = viewBean.image) != null && (str = imageBean.resName) != null && !str.isEmpty()) {
                     try {
                         crashlytics.log("ViewPane: trying to set image to FAB");

@@ -1,6 +1,7 @@
 package pro.sketchware.ai.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -20,6 +21,7 @@ class GeminiClient implements AiClient {
 
     private static final String MODEL_NAME_PREFIX = "models/";
     private static final String GENERATE_METHOD = "generateContent";
+    private static final String STREAM_METHOD = "streamGenerateContent";
     private static final int MODELS_PAGE_SIZE = 1000;
 
     private final AiConfiguration configuration;
@@ -70,6 +72,13 @@ class GeminiClient implements AiClient {
     @NonNull
     @Override
     public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages) throws AiException {
+        return complete(systemPrompt, messages, null);
+    }
+
+    @NonNull
+    @Override
+    public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages,
+                           @Nullable StreamListener listener) throws AiException {
         JsonArray contents = new JsonArray();
         for (AiMessage message : messages) {
             JsonObject content = textContent(message.getContent());
@@ -83,8 +92,74 @@ class GeminiClient implements AiClient {
         }
         body.add("contents", contents);
 
-        String path = "/" + MODEL_NAME_PREFIX + configuration.getModel().trim() + ":" + GENERATE_METHOD;
-        return readReply(AiHttp.post(url(path), headers(), body));
+        String model = "/" + MODEL_NAME_PREFIX + configuration.getModel().trim();
+        if (listener != null) {
+            try {
+                return streamReply(url(model + ":" + STREAM_METHOD + "?alt=sse"), body, listener);
+            } catch (AiException e) {
+                if (!AiHttp.isStreamingUnsupported(e)) {
+                    throw e;
+                }
+            }
+        }
+        return readReply(AiHttp.post(url(model + ":" + GENERATE_METHOD), headers(), body));
+    }
+
+    /**
+     * Every streamed event is a partial answer of the same shape as a whole one.
+     */
+    private String streamReply(String url, JsonObject body, StreamListener listener) throws AiException {
+        StringBuilder text = new StringBuilder();
+        String[] finishReason = {null};
+        int[] thinking = {0};
+        JsonObject whole = AiHttp.postStream(url, headers(), body, event -> {
+            JsonElement candidates = event.get("candidates");
+            if (candidates == null || !candidates.isJsonArray() || candidates.getAsJsonArray().isEmpty()
+                    || !candidates.getAsJsonArray().get(0).isJsonObject()) {
+                return;
+            }
+            JsonObject candidate = candidates.getAsJsonArray().get(0).getAsJsonObject();
+            String reason = AiHttp.optString(candidate, "finishReason");
+            if (reason != null) {
+                finishReason[0] = reason;
+            }
+            JsonElement content = candidate.get("content");
+            JsonElement parts = content != null && content.isJsonObject() ? content.getAsJsonObject().get("parts") : null;
+            if (parts == null || !parts.isJsonArray()) {
+                return;
+            }
+            boolean changed = false;
+            for (JsonElement part : parts.getAsJsonArray()) {
+                if (!part.isJsonObject()) {
+                    continue;
+                }
+                String partText = AiHttp.optString(part.getAsJsonObject(), "text");
+                if (isThought(part.getAsJsonObject())) {
+                    if (partText != null) {
+                        thinking[0] += partText.length();
+                        listener.onThinking(thinking[0]);
+                    }
+                    continue;
+                }
+                if (partText != null && !partText.isEmpty()) {
+                    text.append(partText);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                listener.onText(text.toString());
+            }
+        });
+        if (whole != null) {
+            return readReply(whole);
+        }
+        if ("MAX_TOKENS".equals(finishReason[0])) {
+            throw new AiException("The answer was cut off because it hit the model's output limit. Ask for a smaller app, or pick a model with a larger output limit.");
+        }
+        if (text.toString().trim().isEmpty()) {
+            throw new AiException("The model returned no answer. The request may have been blocked by its safety filters.");
+        }
+        return text.toString();
     }
 
     private String readReply(JsonObject response) throws AiException {

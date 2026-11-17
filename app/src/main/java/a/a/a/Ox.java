@@ -488,9 +488,14 @@ public class Ox {
         writeLayoutGravity(floatingActionButtonTag, viewBean);
 
         String resName = viewBean.image.resName;
-        if (resName != null && !resName.isEmpty() && !resName.equals("NONE") &&
-                !toNotAdd.contains("app:srcCompat") && !injectHandler.contains("srcCompat")) {
-            floatingActionButtonTag.addAttribute("app", "srcCompat", "@drawable/" + resName.toLowerCase());
+        if (!toNotAdd.contains("app:srcCompat") && !injectHandler.contains("srcCompat")) {
+            if (ViewBean.hasNoImageChosen(resName)) {
+                // A new floating action button has no image set yet; give it the default icon,
+                // which comes with Android itself so it exists in every built app
+                floatingActionButtonTag.addAttribute("app", "srcCompat", ViewBean.FAB_DEFAULT_ICON_XML);
+            } else if (!resName.equals("NONE")) {
+                floatingActionButtonTag.addAttribute("app", "srcCompat", "@drawable/" + resName.toLowerCase());
+            }
         }
         if (viewBean.id.equals("_fab")) {
             aci.inject(floatingActionButtonTag, "FloatingActionButton");

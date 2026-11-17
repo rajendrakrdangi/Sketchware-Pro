@@ -34,7 +34,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import a.a.a.Qp;
-import a.a.a.WB;
+import a.a.a.WBValidator;
 import a.a.a.bB;
 import a.a.a.uq;
 import a.a.a.yy;
@@ -59,7 +59,7 @@ public class AddSoundActivity extends BaseDialogActivity implements View.OnClick
     private MediaPlayer nowPlayingPlayer;
     private TimerTask nowPlayingProgressUpdater;
     private SeekBar nowPlayingProgressBar;
-    private WB soundNameValidator;
+    private WBValidator soundNameValidator;
     private String sc_id;
     private String soundsDirectory;
     private MaterialCardView nowPlayingContainer;
@@ -160,7 +160,7 @@ public class AddSoundActivity extends BaseDialogActivity implements View.OnClick
         nowPlayingContainer.setVisibility(View.GONE);
         TextInputLayout soundInputLayout = binding.tiInput;
         soundName = binding.edInput;
-        soundNameValidator = new WB(this, soundInputLayout, uq.b, existingSoundNames);
+        soundNameValidator = new WBValidator(this, soundInputLayout, uq.b, existingSoundNames);
         playPause.setEnabled(false);
         playPause.setOnClickListener(this);
         nowPlayingProgressBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -193,7 +193,7 @@ public class AddSoundActivity extends BaseDialogActivity implements View.OnClick
         if (requestCode == 270) {
             e(getString(R.string.design_manager_sound_title_edit_sound));
             ProjectResourceBean projectResourceBean = intent.getParcelableExtra("project_resource");
-            soundNameValidator = new WB(this, soundInputLayout, uq.b, new ArrayList<>());
+            soundNameValidator = new WBValidator(this, soundInputLayout, uq.b, new ArrayList<>());
             soundName.setText(projectResourceBean.resName);
             soundName.setEnabled(false);
             addToCollection.setEnabled(false);
@@ -371,7 +371,7 @@ public class AddSoundActivity extends BaseDialogActivity implements View.OnClick
         mediaMetadataRetriever.release();
     }
 
-    private boolean isSoundValid(WB wb) {
+    private boolean isSoundValid(WBValidator wb) {
         if (!wb.b()) {
             return false;
         }

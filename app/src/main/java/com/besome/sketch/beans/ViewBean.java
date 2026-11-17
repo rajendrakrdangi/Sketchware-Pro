@@ -58,6 +58,13 @@ public class ViewBean extends nA implements Parcelable {
     public static final int VIEW_TYPE_WIDGET_SEEKBAR = 14;
     public static final int VIEW_TYPE_WIDGET_CALENDARVIEW = 15;
     public static final int VIEW_TYPE_WIDGET_FAB = 16;
+    /**
+     * The icon of a floating action button whose image was never chosen. It's one of Android's
+     * own drawables, so it exists in every built app without being a project resource. Choosing
+     * the image "NONE" still removes the icon.
+     */
+    public static final int FAB_DEFAULT_ICON = android.R.drawable.ic_input_add;
+    public static final String FAB_DEFAULT_ICON_XML = "@android:drawable/ic_input_add";
     public static final int VIEW_TYPE_WIDGET_ADVIEW = 17;
     public static final int VIEW_TYPE_WIDGET_MAPVIEW = 18;
     public static final int VIEW_TYPE_COUNT = 19;
@@ -221,6 +228,14 @@ public class ViewBean extends nA implements Parcelable {
 
     public static Parcelable.Creator<ViewBean> getCreator() {
         return CREATOR;
+    }
+
+    /**
+     * @param resName An image's resource name as stored in {@link ImageBean#resName}.
+     * @return Whether no image was ever chosen, as opposed to explicitly choosing "NONE".
+     */
+    public static boolean hasNoImageChosen(String resName) {
+        return resName == null || resName.trim().isEmpty();
     }
 
     public static int getViewTypeByTypeName(String typeName) {

@@ -89,10 +89,26 @@
         </LinearLayout>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-    <com.besome.sketch.MainDrawer
-        android:id="@+id/left_drawer"
-        android:layout_width="wrap_content"
+    <FrameLayout
+        android:id="@+id/drawer_container"
+        android:layout_width="320dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start" />
+        android:layout_gravity="start"
+        android:background="?attr/colorSurfaceContainerLow"
+        android:clickable="true"
+        android:focusable="true">
+
+        <com.besome.sketch.MainDrawer
+            android:id="@+id/left_drawer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <include
+            android:id="@+id/ai_drawer"
+            layout="@layout/layout_ai_drawer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>

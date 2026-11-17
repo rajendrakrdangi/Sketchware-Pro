@@ -1,10 +1,11 @@
 package pro.sketchware.ai.generator;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Maps the type names a model may use (see {@link AiProjectPrompt}) to Sketchware's own.
+ * Components and events come from {@link AiSketchwareCatalog} instead, which reads them from
+ * Sketchware itself.
  */
 final class AiSpecTypes {
 
@@ -26,30 +27,12 @@ final class AiSpecTypes {
             "ListMap", 3);
 
     /**
-     * Component type name to the type name
-     * <code>ComponentBean#getComponentTypeByTypeName(String)</code> understands.
-     */
-    static final Map<String, String> COMPONENTS = Map.of(
-            "Intent", "Intent",
-            "SharedPreferences", "File",
-            "Calendar", "Calendar",
-            "Vibrator", "Vibrator",
-            "Dialog", "Dialog",
-            "Timer", "Timer");
-
-    /**
      * Method parameter type name to its More Block spec placeholder.
      */
     static final Map<String, String> METHOD_PARAMETERS = Map.of(
             "String", "%s",
             "number", "%d",
             "boolean", "%b");
-
-    /**
-     * The Activity lifecycle events a screen can handle, besides onCreate.
-     */
-    static final Set<String> ACTIVITY_EVENTS = Set.of(
-            "onBackPressed", "onStart", "onResume", "onPause", "onStop", "onDestroy");
 
     private AiSpecTypes() {
     }

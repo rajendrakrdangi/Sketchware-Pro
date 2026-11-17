@@ -1,6 +1,7 @@
 package pro.sketchware.ai.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -56,6 +57,14 @@ class OpenAiCompatibleClient implements AiClient {
     @NonNull
     @Override
     public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages) throws AiException {
+        return complete(systemPrompt, messages, null);
+    }
+
+    @NonNull
+    @Override
+    public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages,
+                           @Nullable StreamListener listener) throws AiException {
+        boolean stream = listener != null;
         JsonArray jsonMessages = new JsonArray();
         if (!systemPrompt.isEmpty()) {
             jsonMessages.add(message("system", systemPrompt));
@@ -80,8 +89,18 @@ class OpenAiCompatibleClient implements AiClient {
                 body.addProperty(limitParameter, MAX_TOKENS_CANDIDATES[candidate]);
             }
             try {
+                if (stream) {
+                    body.addProperty("stream", true);
+                    return streamReply(body, listener);
+                }
+                body.remove("stream");
                 return readReply(AiHttp.post(url("/chat/completions"), headers(), body));
             } catch (AiException e) {
+                if (stream && AiHttp.isStreamingUnsupported(e) && !isRejectedLimit(e)) {
+                    // The server can't stream; the same request without streaming still works
+                    stream = false;
+                    continue;
+                }
                 if (candidate >= MAX_TOKENS_CANDIDATES.length || !isRejectedLimit(e)) {
                     throw e;
                 }
@@ -93,6 +112,61 @@ class OpenAiCompatibleClient implements AiClient {
                 }
             }
         }
+    }
+
+    /**
+     * Reads a streamed answer: every event carries the next piece of the text in
+     * <code>choices[0].delta.content</code>.
+     */
+    private String streamReply(JsonObject body, StreamListener listener) throws AiException {
+        StringBuilder text = new StringBuilder();
+        String[] finishReason = {null};
+        int[] thinking = {0};
+        JsonObject whole = AiHttp.postStream(url("/chat/completions"), headers(), body, event -> {
+            JsonElement error = event.get("error");
+            if (error != null && error.isJsonObject()) {
+                String message = AiHttp.optString(error.getAsJsonObject(), "message");
+                throw new AiException(message == null ? "The model reported an error." : message);
+            }
+            JsonElement choices = event.get("choices");
+            if (choices == null || !choices.isJsonArray() || choices.getAsJsonArray().isEmpty()
+                    || !choices.getAsJsonArray().get(0).isJsonObject()) {
+                return;
+            }
+            JsonObject choice = choices.getAsJsonArray().get(0).getAsJsonObject();
+            String reason = AiHttp.optString(choice, "finish_reason");
+            if (reason != null) {
+                finishReason[0] = reason;
+            }
+            JsonElement delta = choice.get("delta");
+            if (delta != null && delta.isJsonObject()) {
+                // Reasoning models (NVIDIA, DeepSeek, OpenRouter, ...) stream their thinking first
+                JsonObject deltaObject = delta.getAsJsonObject();
+                for (String reasoningKey : new String[]{"reasoning_content", "reasoning"}) {
+                    String reasoning = AiHttp.optString(deltaObject, reasoningKey);
+                    if (reasoning != null && !reasoning.isEmpty()) {
+                        thinking[0] += reasoning.length();
+                        listener.onThinking(thinking[0]);
+                        break;
+                    }
+                }
+                String piece = readContent(deltaObject.get("content"));
+                if (!piece.isEmpty()) {
+                    text.append(piece);
+                    listener.onText(text.toString());
+                }
+            }
+        });
+        if (whole != null) {
+            return readReply(whole);
+        }
+        if ("length".equals(finishReason[0])) {
+            throw new AiException("The answer was cut off because it hit the model's output limit. Ask for a smaller app, or pick a model with a larger output limit.");
+        }
+        if (text.toString().trim().isEmpty()) {
+            throw new AiException("The model returned an empty answer.");
+        }
+        return text.toString();
     }
 
     private boolean isRejectedLimit(AiException e) {

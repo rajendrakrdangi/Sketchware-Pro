@@ -5,10 +5,12 @@ import android.util.Pair;
 
 import androidx.annotation.NonNull;
 
+import com.besome.sketch.beans.AdTestDeviceBean;
 import com.besome.sketch.beans.BlockBean;
 import com.besome.sketch.beans.ComponentBean;
 import com.besome.sketch.beans.EventBean;
 import com.besome.sketch.beans.ProjectFileBean;
+import com.besome.sketch.beans.ProjectLibraryBean;
 import com.besome.sketch.beans.ViewBean;
 
 import java.util.ArrayList;
@@ -49,9 +51,15 @@ public class AiProjectReader {
     private static final Pattern MORE_BLOCK_PARAMETER = Pattern.compile("%([sdbm])(?:\\.[\\w.]*)?\\.(\\w+)");
 
     private final Context context;
+    private final AiSketchwareCatalog catalog;
 
     public AiProjectReader(@NonNull Context context) {
+        this(context, AiSketchwareCatalog.load());
+    }
+
+    public AiProjectReader(@NonNull Context context, @NonNull AiSketchwareCatalog catalog) {
         this.context = context.getApplicationContext();
+        this.catalog = catalog;
     }
 
     @NonNull
@@ -80,6 +88,17 @@ public class AiProjectReader {
         spec.colors.colorPrimaryDark = hexColor(metadata, ProjectFile.COLOR_PRIMARY_DARK);
         spec.colors.colorAccent = hexColor(metadata, ProjectFile.COLOR_ACCENT);
 
+        ProjectLibraryBean admob = libraryManager.b();
+        if (admob != null && ProjectLibraryBean.LIB_USE_Y.equals(admob.useYn)) {
+            spec.admob = new AiProjectSpec.Admob();
+            spec.admob.enabled = true;
+            if (admob.testDevices != null) {
+                for (AdTestDeviceBean device : admob.testDevices) {
+                    spec.admob.testDevices.add(device.deviceId);
+                }
+            }
+        }
+
         List<String> unsupported = new ArrayList<>();
         for (ProjectFileBean file : fileManager.b()) {
             if (file.fileName.contains(FRAGMENT_MARKER)) {
@@ -97,6 +116,8 @@ public class AiProjectReader {
             itemLayout.layout = layoutXml(sourceGenerator, dataManager, customView);
             spec.itemLayouts.add(itemLayout);
         }
+        // Images and resource files, so an edit can use and keep them
+        new AiProjectResources(context).read(sc_id, spec);
         return new Result(sc_id, spec, unsupported);
     }
 
@@ -129,7 +150,8 @@ public class AiProjectReader {
             }
         }
         for (ComponentBean component : dataManager.e(java)) {
-            String type = keyOf(AiSpecTypes.COMPONENTS, ComponentBean.getComponentTypeName(component.type));
+            AiSketchwareCatalog.ComponentInfo info = catalog.componentByTypeId(component.type);
+            String type = info == null ? null : info.specName;
             if (type == null) {
                 unsupported.add("the " + ComponentBean.getComponentTypeName(component.type) + " component \"" + component.componentId + "\" of " + activity);
                 continue;
@@ -165,12 +187,14 @@ public class AiProjectReader {
                 // Read as the screen's onCreate code
                 return;
             }
-            if (!AiSpecTypes.ACTIVITY_EVENTS.contains(event.eventName)) {
+            if (!catalog.activityEventNames().contains(event.eventName)) {
                 unsupported.add("the " + event.eventName + " event of " + activity);
                 return;
             }
             target = AiProjectPrompt.TARGET_ACTIVITY;
         } else if (event.eventType == EventBean.EVENT_TYPE_VIEW) {
+            target = event.targetId;
+        } else if (event.eventType == EventBean.EVENT_TYPE_COMPONENT && hasComponent(screen, event.targetId)) {
             target = event.targetId;
         } else {
             unsupported.add("the " + event.eventName + " event of \"" + event.targetId + "\" in " + activity);
@@ -179,7 +203,7 @@ public class AiProjectReader {
 
         AiProjectSpec.Event specEvent = new AiProjectSpec.Event();
         specEvent.target = target;
-        specEvent.name = event.eventName;
+        specEvent.name = event.eventName.trim();
         specEvent.code = code(sourceGenerator, dataManager, activity, java, event.getEventKey());
         screen.events.add(specEvent);
     }
@@ -229,6 +253,15 @@ public class AiProjectReader {
             return "";
         }
         return new Fx(activity, sourceGenerator.N, blocks, false).a();
+    }
+
+    private static boolean hasComponent(AiProjectSpec.Screen screen, String name) {
+        for (AiProjectSpec.Component component : screen.components) {
+            if (component.name.equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static AiProjectSpec.Field field(String type, String name) {

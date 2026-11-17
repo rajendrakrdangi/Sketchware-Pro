@@ -19,6 +19,7 @@ import android.widget.ArrayAdapter;
 import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
@@ -29,10 +30,15 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.transition.MaterialFadeThrough;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.signature.ObjectKey;
+
+import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 
 import a.a.a.lC;
+import a.a.a.wq;
 import a.a.a.yB;
 import mod.hey.studios.util.Helper;
 import pro.sketchware.R;
@@ -45,6 +51,7 @@ import pro.sketchware.databinding.FragmentAiBinding;
 import pro.sketchware.databinding.ItemAiProjectChoiceBinding;
 import pro.sketchware.lib.base.BaseTextWatcher;
 import pro.sketchware.utility.SketchwareUtil;
+import pro.sketchware.utility.ThemeUtils;
 import pro.sketchware.utility.UI;
 
 /**
@@ -91,12 +98,17 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         repository = new AiConfigurationRepository(requireContext());
-        viewModel = new ViewModelProvider(this).get(AiChatViewModel.class);
+        viewModel = new ViewModelProvider(requireActivity()).get(AiChatViewModel.class);
         appBar = requireActivity().findViewById(R.id.appbar);
         bottomNavigation = requireActivity().findViewById(R.id.bottom_nav);
 
         adapter = new AiChatAdapter(this);
         binding.messages.setAdapter(adapter);
+        // Rows change several times a second while the AI works; cross-fading every change makes
+        // them flicker, and an expanding file card would fade over the rows below it
+        if (binding.messages.getItemAnimator() instanceof androidx.recyclerview.widget.SimpleItemAnimator animator) {
+            animator.setSupportsChangeAnimations(false);
+        }
         // The chat scrolls on its own; letting it move the hidden search bar would move the chat
         binding.messages.setNestedScrollingEnabled(false);
         UI.addSystemWindowInsetToPadding(binding.topBar, true, true, true, false);
@@ -332,6 +344,8 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         projects.sort((first, second) -> Integer.compare(
                 parseId(yB.c(second, "sc_id")), parseId(yB.c(first, "sc_id"))));
 
+        AiChatViewModel.AttachedProject attached = viewModel.getAttachedProject().getValue();
+        String attachedId = attached == null ? null : attached.sc_id();
         ArrayAdapter<HashMap<String, Object>> adapter = new ArrayAdapter<>(requireContext(), 0, projects) {
             @NonNull
             @Override
@@ -340,9 +354,17 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
                         ? ItemAiProjectChoiceBinding.inflate(getLayoutInflater(), parent, false)
                         : ItemAiProjectChoiceBinding.bind(convertView);
                 HashMap<String, Object> project = projects.get(position);
+                String sc_id = yB.c(project, "sc_id");
                 item.name.setText(yB.c(project, "my_app_name"));
                 item.details.setText(getString(R.string.ai_chat_project_details,
-                        yB.c(project, "sc_id"), yB.c(project, "my_sc_pkg_name")));
+                        sc_id, yB.c(project, "my_sc_pkg_name")));
+                bindProjectIcon(item, project, sc_id);
+                boolean selected = sc_id.equals(attachedId);
+                item.selected.setVisibility(selected ? View.VISIBLE : View.GONE);
+                item.getRoot().setActivated(selected);
+                item.getRoot().setBackgroundColor(selected
+                        ? ThemeUtils.getColor(item.getRoot(), R.attr.colorSecondaryContainer)
+                        : android.graphics.Color.TRANSPARENT);
                 return item.getRoot();
             }
         };
@@ -356,6 +378,27 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
                 })
                 .setNegativeButton(R.string.common_word_cancel, null)
                 .show();
+    }
+
+    /**
+     * Shows the project's own icon, from the same place the project list reads it, or the default
+     * icon if the project has none or the file is missing or unreadable.
+     */
+    private void bindProjectIcon(ItemAiProjectChoiceBinding item, HashMap<String, Object> project, String sc_id) {
+        Glide.with(this).clear(item.icon);
+        item.icon.setImageResource(R.drawable.default_icon);
+        if (!yB.a(project, "custom_icon")) {
+            return;
+        }
+        File iconFile = new File(wq.e() + File.separator + sc_id, "icon.png");
+        if (iconFile.isFile()) {
+            Glide.with(this)
+                    .load(iconFile)
+                    .signature(new ObjectKey(iconFile.lastModified()))
+                    .placeholder(R.drawable.default_icon)
+                    .error(R.drawable.default_icon)
+                    .into(item.icon);
+        }
     }
 
     private static int parseId(String sc_id) {
@@ -393,9 +436,22 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
 
     private void showItems(List<ChatItem> items) {
         int previousCount = adapter.getItemCount();
+        // Someone reading further up keeps their place; someone at the end keeps seeing it,
+        // also while the progress row grows with new steps
+        boolean atEnd = !binding.messages.canScrollVertically(1);
         adapter.submitList(items, () -> {
-            if (binding != null && !items.isEmpty() && items.size() != previousCount) {
+            if (binding == null || items.isEmpty()) {
+                return;
+            }
+            if (items.size() != previousCount) {
                 binding.messages.smoothScrollToPosition(items.size() - 1);
+            } else if (atEnd) {
+                binding.messages.post(() -> {
+                    if (binding != null) {
+                        binding.messages.scrollToPosition(items.size() - 1);
+                        binding.messages.scrollBy(0, Integer.MAX_VALUE / 2);
+                    }
+                });
             }
         });
         binding.welcome.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
@@ -427,6 +483,54 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText(file.getName(), file.getContent()));
         SketchwareUtil.toast(getString(R.string.ai_chat_copied, file.getName()));
+    }
+
+    @Override
+    public void onOpenConfiguration() {
+        openConfiguration();
+    }
+
+    @Override
+    public void onAnswerQuestions(long itemId, @Nullable String answers) {
+        AiConfiguration configuration = repository.getSelected();
+        if (configuration == null) {
+            openConfiguration();
+            return;
+        }
+        if (!mainActivity().isStoragePermissionGranted()) {
+            SketchwareUtil.toastError(getString(R.string.ai_error_storage));
+            mainActivity().s();
+            return;
+        }
+        hideKeyboard();
+        viewModel.answerQuestions(itemId, answers, configuration);
+    }
+
+    @Override
+    public void onResumeTask() {
+        AiConfiguration configuration = repository.getSelected();
+        if (configuration == null) {
+            openConfiguration();
+            return;
+        }
+        if (!mainActivity().isStoragePermissionGranted()) {
+            SketchwareUtil.toastError(getString(R.string.ai_error_storage));
+            mainActivity().s();
+            return;
+        }
+        viewModel.resume(configuration);
+    }
+
+    public void loadSession(@NonNull String sessionId) {
+        if (viewModel != null) {
+            viewModel.loadSession(sessionId);
+        }
+    }
+
+    public void newChat() {
+        if (viewModel != null) {
+            viewModel.newChat();
+        }
     }
 
     // ---------------------------------------------------------------------------------------

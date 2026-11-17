@@ -1,6 +1,7 @@
 package pro.sketchware.ai.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.List;
 
@@ -25,6 +26,31 @@ public interface AiClient {
      */
     @NonNull
     String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages) throws AiException;
+
+    /**
+     * Like {@link #complete(String, List)}, but reports the answer while it's being written, for
+     * providers that can stream. Ones that can't, or a server that refuses to, give the same
+     * answer without progress.
+     *
+     * @param listener Called on the calling thread with the whole answer received so far.
+     */
+    @NonNull
+    default String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages,
+                            @Nullable StreamListener listener) throws AiException {
+        return complete(systemPrompt, messages);
+    }
+
+    interface StreamListener {
+        void onText(@NonNull String textSoFar);
+
+        /**
+         * Reasoning models think before they answer and stream that separately; this reports
+         * how much thinking has arrived, so a long silence before the answer isn't mistaken for
+         * a hang.
+         */
+        default void onThinking(int charactersSoFar) {
+        }
+    }
 
     /**
      * Sends a minimal request to verify that key, base URL and model work together.

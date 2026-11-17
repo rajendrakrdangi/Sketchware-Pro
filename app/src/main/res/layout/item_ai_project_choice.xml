@@ -11,12 +11,14 @@
     android:paddingHorizontal="24dp"
     android:paddingVertical="10dp">
 
-    <ImageView
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/icon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:importantForAccessibility="no"
-        android:src="@drawable/ic_mtrl_folder_code"
-        app:tint="?attr/colorPrimary" />
+        android:scaleType="centerCrop"
+        android:src="@drawable/default_icon"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Medium" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -45,4 +47,15 @@
             android:textColor="?attr/colorOnSurfaceVariant"
             tools:text="ID 605 · com.ai.tipcalculator" />
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/selected"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="8dp"
+        android:contentDescription="@string/ai_chat_project_selected"
+        android:src="@drawable/ic_mtrl_check"
+        android:visibility="gone"
+        app:tint="?attr/colorPrimary"
+        tools:visibility="visible" />
 </LinearLayout>

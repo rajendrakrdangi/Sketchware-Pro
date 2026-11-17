@@ -7,10 +7,12 @@ import com.google.gson.JsonParseException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -26,6 +28,18 @@ public class AiResponseParser {
     private static final Pattern JAVA_IDENTIFIER = Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
     private static final Pattern PACKAGE_NAME = Pattern.compile("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+");
     private static final Pattern HEX_COLOR = Pattern.compile("#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})");
+    /**
+     * Events whose generated method ends with a "return" of its own, see
+     * <code>a.a.a.Lx#getEventCode</code>.
+     */
+    private static final Set<String> EVENTS_ENDING_IN_RETURN = Set.of("onItemLongClicked");
+    private static final Pattern TRAILING_RETURN = Pattern.compile("\\s*return\\s+(true|false)\\s*;\\s*$");
+    /**
+     * A variable used as an Intent: <code>x.setClass(</code>, <code>x.putExtra(</code> or
+     * <code>startActivity(x)</code>.
+     */
+    private static final Pattern INTENT_USE = Pattern.compile(
+            "(?<![\\w.])([A-Za-z_]\\w*)\\s*\\.\\s*(?:setClass|putExtra)\\s*\\(|(?<![\\w.])startActivity\\s*\\(\\s*([A-Za-z_]\\w*)\\s*\\)");
     private static final String FALLBACK_APP_NAME = "AI App";
     private static final String FALLBACK_PROJECT_NAME = "AiApp";
     private static final String PACKAGE_PREFIX = "com.ai.";
@@ -45,7 +59,17 @@ public class AiResponseParser {
             "throw", "throws", "transient", "try", "void", "volatile", "while", "true", "false",
             "null");
 
+    private static final int MAX_HIGHLIGHTS = 8;
     private final Gson gson = new Gson();
+    private final AiSketchwareCatalog catalog;
+
+    public AiResponseParser() {
+        this(AiSketchwareCatalog.load());
+    }
+
+    public AiResponseParser(@NonNull AiSketchwareCatalog catalog) {
+        this.catalog = catalog;
+    }
 
     /**
      * @return The spec of an app, or one with only {@link AiProjectSpec#reply} set when the
@@ -80,6 +104,16 @@ public class AiResponseParser {
 
         validateScreens(spec);
         validateItemLayouts(spec);
+        AiResourceRules.validate(spec);
+        normalizeAdmob(spec);
+        spec.summary = isBlank(spec.summary) ? null : spec.summary.trim();
+        List<String> highlights = new ArrayList<>();
+        for (String highlight : nonNull(spec.highlights)) {
+            if (!isBlank(highlight) && highlights.size() < MAX_HIGHLIGHTS) {
+                highlights.add(highlight.trim());
+            }
+        }
+        spec.highlights = highlights;
         return spec;
     }
 
@@ -202,7 +236,7 @@ public class AiResponseParser {
             if (component == null) {
                 throw new AiSpecException(where + "\"components\" contains null.");
             }
-            validateMember(component.name, component.type, AiSpecTypes.COMPONENTS, where + "component", memberNames);
+            validateMember(component.name, component.type, catalog.componentTypes(), where + "component", memberNames);
             component.param = component.param == null ? "" : component.param.trim();
         }
         for (AiProjectSpec.Method method : screen.methods) {
@@ -215,10 +249,113 @@ public class AiResponseParser {
             event.target = event.target.trim();
             event.name = event.name.trim();
             event.code = event.code == null ? "" : event.code;
+            if (EVENTS_ENDING_IN_RETURN.contains(event.name) || templateReturns(screen, event)) {
+                // Sketchware's template already ends these with "return true;", so a return at the
+                // end of the model's code would make the template's unreachable
+                event.code = TRAILING_RETURN.matcher(event.code).replaceFirst("");
+            }
         }
         fixMethodCalls(screen);
+        fixParameterReferences(screen);
+        addMissingIntents(screen);
     }
 
+    /**
+     * @return Whether Sketchware's template of the event ends with its own return statement, as
+     * onCreateOptionsMenu's does, read from the catalog.
+     */
+    private boolean templateReturns(AiProjectSpec.Screen screen, AiProjectSpec.Event event) {
+        AiSketchwareCatalog.EventInfo info = null;
+        if (AiProjectPrompt.TARGET_ACTIVITY.equals(event.target)) {
+            info = catalog.activityEvent(event.name);
+        } else if (screen.layout != null) {
+            Matcher tag = Pattern.compile("<([\\w.]+)\\b[^>]*android:id\\s*=\\s*\"@\\+id/" + Pattern.quote(event.target) + "\"")
+                    .matcher(screen.layout);
+            if (tag.find()) {
+                AiSketchwareCatalog.WidgetInfo widget = catalog.widgetByTag(tag.group(1));
+                info = widget == null ? null : widget.event(event.name);
+            }
+        }
+        if (info == null && !AiProjectPrompt.TARGET_ACTIVITY.equals(event.target)) {
+            for (AiProjectSpec.Component component : screen.components) {
+                if (event.target.equals(component.name)) {
+                    AiSketchwareCatalog.ComponentInfo componentInfo = catalog.component(component.type);
+                    info = componentInfo == null ? null : componentInfo.event(event.name);
+                }
+            }
+        }
+        return info != null && info.returnsAfter;
+    }
+
+    private void normalizeAdmob(AiProjectSpec spec) {
+        if (spec.admob == null) {
+            return;
+        }
+        List<String> devices = new ArrayList<>();
+        for (String device : nonNull(spec.admob.testDevices)) {
+            if (!isBlank(device) && !devices.contains(device.trim())) {
+                devices.add(device.trim());
+            }
+        }
+        spec.admob.testDevices = devices;
+    }
+
+    /**
+     * Sketchware declares a method's parameters with an underscore, which models often forget in
+     * the method's body.
+     */
+    private void fixParameterReferences(AiProjectSpec.Screen screen) {
+        for (AiProjectSpec.Method method : screen.methods) {
+            List<String> parameterNames = new ArrayList<>();
+            for (AiProjectSpec.Field parameter : method.params) {
+                parameterNames.add(parameter.name);
+            }
+            method.code = JavaIdentifierRewriter.prefixParameterReferences(method.code, parameterNames);
+        }
+    }
+
+    /**
+     * Models regularly open screens through an Intent they never declared. Every Intent the code
+     * uses that isn't a field or a local variable becomes an Intent component of the screen.
+     */
+    private void addMissingIntents(AiProjectSpec.Screen screen) {
+        StringBuilder allCode = new StringBuilder(screen.onCreate);
+        for (AiProjectSpec.Event event : screen.events) {
+            allCode.append('\n').append(event.code);
+        }
+        for (AiProjectSpec.Method method : screen.methods) {
+            allCode.append('\n').append(method.code);
+        }
+        String code = allCode.toString();
+
+        Set<String> members = new HashSet<>();
+        for (AiProjectSpec.Field variable : screen.variables) {
+            members.add(variable.name);
+        }
+        for (AiProjectSpec.Field list : screen.lists) {
+            members.add(list.name);
+        }
+        for (AiProjectSpec.Component component : screen.components) {
+            members.add(component.name);
+        }
+
+        Set<String> intentNames = new LinkedHashSet<>();
+        Matcher uses = INTENT_USE.matcher(code);
+        while (uses.find()) {
+            intentNames.add(uses.group(1) != null ? uses.group(1) : uses.group(2));
+        }
+        for (String name : intentNames) {
+            if (members.contains(name) || JAVA_KEYWORDS.contains(name) || JavaIdentifierRewriter.declaresLocal(code, name)) {
+                continue;
+            }
+            AiProjectSpec.Component intent = new AiProjectSpec.Component();
+            intent.type = "Intent";
+            intent.name = name;
+            intent.param = "";
+            screen.components.add(intent);
+            members.add(name);
+        }
+    }
     /**
      * Adds the underscore Sketchware puts in front of every method name to calls that lack it.
      */

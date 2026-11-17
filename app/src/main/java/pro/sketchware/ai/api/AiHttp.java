@@ -1,6 +1,7 @@
 package pro.sketchware.ai.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -20,6 +21,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.BufferedSource;
 
 /**
  * The HTTP plumbing shared by all {@link AiClient}s: sends JSON, returns parsed JSON, and turns
@@ -55,6 +57,113 @@ final class AiHttp {
     }
 
     /**
+     * Sends a request that asks for a streamed answer (server-sent events) and hands every event's
+     * JSON to <code>onEvent</code> as it arrives.
+     *
+     * @return The whole answer if the server ignored the request to stream and answered with plain
+     * JSON instead, which some OpenAI-compatible servers do; null once a stream was read to its end.
+     */
+    @Nullable
+    static JsonObject postStream(@NonNull String url, @NonNull Map<String, String> headers, @NonNull JsonObject body,
+                                 @NonNull StreamHandler onEvent) throws AiException {
+        Request request = newRequest(url, headers).header("Accept", "text/event-stream")
+                .post(RequestBody.create(body.toString(), JSON)).build();
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return streamOnce(request, onEvent);
+            } catch (AiException e) {
+                boolean neverArrived = e.getCause() instanceof UnknownHostException || e.getCause() instanceof ConnectException;
+                // Only retried before anything was streamed, so no answer is shown twice
+                boolean temporary = isTemporary(e.getStatusCode());
+                if (!(neverArrived || temporary) || attempt >= MAX_CONNECT_ATTEMPTS) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(RETRY_DELAY_MS * attempt * (e.getStatusCode() == 429 ? 2 : 1));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private static JsonObject streamOnce(Request request, StreamHandler onEvent) throws AiException {
+        try (Response response = CLIENT.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            if (!response.isSuccessful()) {
+                String body = responseBody == null ? "" : responseBody.string();
+                throw new AiException(describeError(response.code(), body), response.code(), null);
+            }
+            if (responseBody == null) {
+                throw new AiException("The server sent an empty answer.", response.code(), null);
+            }
+            String contentType = response.header("Content-Type", "");
+            if (contentType == null || !contentType.contains("event-stream")) {
+                // Not a stream after all
+                String body = responseBody.string();
+                try {
+                    return JsonParser.parseString(body).getAsJsonObject();
+                } catch (JsonParseException | IllegalStateException e) {
+                    throw new AiException("The server didn't answer with JSON. Check the base URL.", response.code(), e);
+                }
+            }
+            BufferedSource source = responseBody.source();
+            StringBuilder data = new StringBuilder();
+            while (true) {
+                String line = source.readUtf8Line();
+                if (line == null || line.isEmpty()) {
+                    // A blank line ends an event; the end of the body ends the last one
+                    if (data.length() > 0) {
+                        String payload = data.toString().trim();
+                        data.setLength(0);
+                        if (payload.equals("[DONE]")) {
+                            return null;
+                        }
+                        try {
+                            JsonElement event = JsonParser.parseString(payload);
+                            if (event.isJsonObject()) {
+                                onEvent.onEvent(event.getAsJsonObject());
+                            }
+                        } catch (JsonParseException | IllegalStateException ignored) {
+                            // Keep-alive comments and the like
+                        }
+                    }
+                    if (line == null) {
+                        return null;
+                    }
+                } else if (line.startsWith("data:")) {
+                    if (data.length() > 0) {
+                        data.append('\n');
+                    }
+                    data.append(line.substring(5).trim());
+                }
+            }
+        } catch (UnknownHostException e) {
+            throw new AiException("Couldn't reach " + request.url().host() + ". Check your connection and the base URL.", e);
+        } catch (InterruptedIOException e) {
+            throw new AiException("The request timed out. Try again, or pick a faster model.", e);
+        } catch (IOException e) {
+            throw new AiException("Network error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * @return Whether a failed request to stream means the server doesn't support streaming, so
+     * the same request is worth sending again without it.
+     */
+    static boolean isStreamingUnsupported(@NonNull AiException e) {
+        int status = e.getStatusCode();
+        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(java.util.Locale.ROOT);
+        return (status == 400 || status == 404 || status == 405 || status == 415 || status == 422 || status == 501)
+                && (message.contains("stream") || message.contains("sse") || status == 405 || status == 501);
+    }
+
+    interface StreamHandler {
+        void onEvent(@NonNull JsonObject event) throws AiException;
+    }
+
+    /**
      * @return <code>baseUrl + path</code>, tolerating a trailing slash in the base URL.
      */
     @NonNull
@@ -79,6 +188,8 @@ final class AiHttp {
     /**
      * Mobile connections drop out for a moment when switching networks. Requests that never
      * reached the server are safe to send again, so they're retried a few times before failing.
+     * So are answers saying the provider is briefly overloaded or rate limited, which every
+     * provider sends now and then: retrying after a pause usually works.
      */
     private static JsonObject execute(Request request) throws AiException {
         for (int attempt = 1; ; attempt++) {
@@ -86,17 +197,27 @@ final class AiHttp {
                 return executeOnce(request);
             } catch (AiException e) {
                 boolean neverArrived = e.getCause() instanceof UnknownHostException || e.getCause() instanceof ConnectException;
-                if (!neverArrived || attempt >= MAX_CONNECT_ATTEMPTS) {
+                boolean temporary = isTemporary(e.getStatusCode());
+                if (!(neverArrived || temporary) || attempt >= MAX_CONNECT_ATTEMPTS) {
                     throw e;
                 }
                 try {
-                    Thread.sleep(RETRY_DELAY_MS * attempt);
+                    // Rate limits need a longer pause than a dropped connection
+                    Thread.sleep(RETRY_DELAY_MS * attempt * (e.getStatusCode() == 429 ? 2 : 1));
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     throw e;
                 }
             }
         }
+    }
+
+    /**
+     * @return Whether the status means "try again later": rate limited (429), bad gateway (502),
+     * unavailable (503), gateway timeout (504), or Anthropic's overloaded (529).
+     */
+    static boolean isTemporary(int statusCode) {
+        return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504 || statusCode == 529;
     }
 
     private static JsonObject executeOnce(Request request) throws AiException {

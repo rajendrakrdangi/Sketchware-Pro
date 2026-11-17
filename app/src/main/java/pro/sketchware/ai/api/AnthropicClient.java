@@ -1,6 +1,7 @@
 package pro.sketchware.ai.api;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -56,6 +57,14 @@ class AnthropicClient implements AiClient {
     @NonNull
     @Override
     public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages) throws AiException {
+        return complete(systemPrompt, messages, null);
+    }
+
+    @NonNull
+    @Override
+    public String complete(@NonNull String systemPrompt, @NonNull List<AiMessage> messages,
+                           @Nullable StreamListener listener) throws AiException {
+        boolean stream = listener != null;
         JsonArray jsonMessages = new JsonArray();
         for (AiMessage message : messages) {
             JsonObject jsonMessage = new JsonObject();
@@ -72,11 +81,21 @@ class AnthropicClient implements AiClient {
         body.add("messages", jsonMessages);
 
         AiException lastError = null;
-        for (int maxTokens : MAX_TOKENS_CANDIDATES) {
-            body.addProperty("max_tokens", maxTokens);
+        for (int i = 0; i < MAX_TOKENS_CANDIDATES.length; i++) {
+            body.addProperty("max_tokens", MAX_TOKENS_CANDIDATES[i]);
             try {
+                if (stream) {
+                    body.addProperty("stream", true);
+                    return streamReply(body, listener);
+                }
+                body.remove("stream");
                 return readReply(AiHttp.post(url("/messages"), headers(), body));
             } catch (AiException e) {
+                if (stream && AiHttp.isStreamingUnsupported(e) && !isMaxTokensTooHigh(e)) {
+                    stream = false;
+                    i--;
+                    continue;
+                }
                 if (!isMaxTokensTooHigh(e)) {
                     throw e;
                 }
@@ -84,6 +103,56 @@ class AnthropicClient implements AiClient {
             }
         }
         throw lastError;
+    }
+
+    /**
+     * Reads a streamed answer, whose text arrives in <code>content_block_delta</code> events.
+     */
+    private String streamReply(JsonObject body, StreamListener listener) throws AiException {
+        StringBuilder text = new StringBuilder();
+        String[] stopReason = {null};
+        int[] thinking = {0};
+        JsonObject whole = AiHttp.postStream(url("/messages"), headers(), body, event -> {
+            String type = AiHttp.optString(event, "type");
+            if ("error".equals(type)) {
+                JsonElement error = event.get("error");
+                String message = error != null && error.isJsonObject() ? AiHttp.optString(error.getAsJsonObject(), "message") : null;
+                throw new AiException(message == null ? "The model reported an error." : message);
+            }
+            JsonElement delta = event.get("delta");
+            if (delta == null || !delta.isJsonObject()) {
+                return;
+            }
+            JsonObject deltaObject = delta.getAsJsonObject();
+            if ("content_block_delta".equals(type) && "thinking_delta".equals(AiHttp.optString(deltaObject, "type"))) {
+                String piece = AiHttp.optString(deltaObject, "thinking");
+                if (piece != null) {
+                    thinking[0] += piece.length();
+                    listener.onThinking(thinking[0]);
+                }
+            } else if ("content_block_delta".equals(type) && "text_delta".equals(AiHttp.optString(deltaObject, "type"))) {
+                String piece = AiHttp.optString(deltaObject, "text");
+                if (piece != null && !piece.isEmpty()) {
+                    text.append(piece);
+                    listener.onText(text.toString());
+                }
+            } else if ("message_delta".equals(type)) {
+                String reason = AiHttp.optString(deltaObject, "stop_reason");
+                if (reason != null) {
+                    stopReason[0] = reason;
+                }
+            }
+        });
+        if (whole != null) {
+            return readReply(whole);
+        }
+        if ("max_tokens".equals(stopReason[0])) {
+            throw new AiException("The answer was cut off because it hit the model's output limit. Ask for a smaller app, or pick a model with a larger output limit.");
+        }
+        if (text.toString().trim().isEmpty()) {
+            throw new AiException("The model returned an empty answer.");
+        }
+        return text.toString();
     }
 
     private boolean isMaxTokensTooHigh(AiException e) {

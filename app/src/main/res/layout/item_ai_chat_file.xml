@@ -16,7 +16,6 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:animateLayoutChanges="true"
             android:orientation="vertical">
 
             <LinearLayout
@@ -30,28 +29,13 @@
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="8dp">
 
-                <FrameLayout
+                <ImageView
+                    android:id="@+id/status_icon"
                     android:layout_width="24dp"
-                    android:layout_height="24dp">
-
-                    <com.google.android.material.progressindicator.CircularProgressIndicator
-                        android:id="@+id/creating"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:indeterminate="true"
-                        app:indicatorSize="20dp"
-                        app:trackThickness="2dp" />
-
-                    <ImageView
-                        android:id="@+id/created"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_mtrl_code"
-                        android:visibility="gone"
-                        app:tint="?attr/colorPrimary" />
-                </FrameLayout>
+                    android:layout_height="24dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_mtrl_code"
+                    app:tint="?attr/colorPrimary" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -78,8 +62,17 @@
                         android:singleLine="true"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        tools:text="Logic of MainActivity · 42 lines" />
+                        tools:text="Created · Completed" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/stats"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
+                    android:fontFamily="monospace"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    tools:text="+10 −4" />
 
                 <ImageView
                     android:id="@+id/chevron"
@@ -119,14 +112,29 @@
                         tools:text="LinearLayout android:layout_width=match_parent" />
                 </HorizontalScrollView>
 
-                <Button
-                    android:id="@+id/copy"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginEnd="4dp"
-                    android:text="@string/ai_chat_copy" />
+                    android:gravity="end"
+                    android:orientation="horizontal"
+                    android:paddingEnd="4dp">
+
+                    <Button
+                        android:id="@+id/toggle_view"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ai_diff_show_full"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+
+                    <Button
+                        android:id="@+id/copy"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ai_chat_copy" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

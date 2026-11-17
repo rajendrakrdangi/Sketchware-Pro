@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import com.besome.sketch.beans.ProjectFileBean;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,7 +52,54 @@ public final class AiProjectFiles {
             files.add(new GeneratedFile(ProjectFileBean.getXmlName(itemLayout.name),
                     "List item layout", CodeFormatter.formatXml(itemLayout.layout)));
         }
+        if (spec.resources != null) {
+            for (AiProjectSpec.ResourceFile resource : spec.resources) {
+                files.add(new GeneratedFile("res/" + resource.path, "Resource file",
+                        CodeFormatter.formatXml(resource.content)));
+            }
+        }
+        if (spec.icons != null && !spec.icons.isEmpty()) {
+            StringBuilder icons = new StringBuilder();
+            for (AiProjectSpec.Icon icon : spec.icons) {
+                icons.append(icon.name).append(": ").append(icon.icon).append(" (").append(icon.style)
+                        .append(", ").append(icon.color).append(")\n");
+            }
+            files.add(new GeneratedFile("Icons", "Icons from the icon pack, in the image manager", icons.toString().trim()));
+        }
         return files;
+    }
+
+    /**
+     * Pairs the files of a project before and after a change by name.
+     *
+     * @return Only the files that were created, modified or deleted, in the order of
+     * <code>after</code> followed by deleted ones. Files whose content is identical are left out.
+     */
+    @NonNull
+    public static List<GeneratedFile> compare(@NonNull List<GeneratedFile> before, @NonNull List<GeneratedFile> after) {
+        Map<String, GeneratedFile> previous = new LinkedHashMap<>();
+        for (GeneratedFile file : before) {
+            previous.put(file.getName(), file);
+        }
+        List<GeneratedFile> changes = new ArrayList<>();
+        for (GeneratedFile file : after) {
+            GeneratedFile old = previous.remove(file.getName());
+            if (old == null) {
+                changes.add(file);
+            } else if (!normalize(old.getContent()).equals(normalize(file.getContent()))) {
+                changes.add(new GeneratedFile(file.getName(), file.getDescription(), file.getContent(),
+                        old.getContent(), GeneratedFile.Operation.MODIFIED));
+            }
+        }
+        for (GeneratedFile removed : previous.values()) {
+            changes.add(new GeneratedFile(removed.getName(), removed.getDescription(), "",
+                    removed.getContent(), GeneratedFile.Operation.DELETED));
+        }
+        return changes;
+    }
+
+    private static String normalize(String content) {
+        return content.replace("\r\n", "\n").trim();
     }
 
     private static String describeLogic(AiProjectSpec.Screen screen) {

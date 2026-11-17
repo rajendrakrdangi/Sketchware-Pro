@@ -4,6 +4,7 @@ import pro.sketchware.R;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -11,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.text.Editable;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MenuItem;
@@ -23,24 +25,29 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.besome.sketch.design.DesignActivity;
 import com.besome.sketch.lib.base.BasePermissionAppCompatActivity;
 import com.besome.sketch.projects.MyProjectSettingActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 import a.a.a.DB;
@@ -53,10 +60,14 @@ import mod.hilal.saif.activities.tools.ConfigActivity;
 import mod.tyron.backup.SingleCopyTask;
 import pro.sketchware.R;
 import pro.sketchware.activities.about.AboutActivity;
+import pro.sketchware.activities.main.fragments.ai.AiChatViewModel;
 import pro.sketchware.activities.main.fragments.ai.AiFragment;
 import pro.sketchware.activities.main.fragments.projects.ProjectsFragment;
 import pro.sketchware.activities.main.fragments.projects_store.ProjectsStoreFragment;
+import pro.sketchware.ai.history.AiChatSession;
+import pro.sketchware.ai.history.AiHistoryAdapter;
 import pro.sketchware.databinding.MainBinding;
+import pro.sketchware.lib.base.BaseTextWatcher;
 import pro.sketchware.lib.base.BottomSheetDialogView;
 import pro.sketchware.utility.DataResetter;
 import pro.sketchware.utility.FileUtil;
@@ -84,6 +95,8 @@ public class MainActivity extends BasePermissionAppCompatActivity {
     private Fragment activeFragment;
     @IdRes
     private int currentNavItemId = R.id.item_projects;
+    private AiHistoryAdapter aiHistoryAdapter;
+    private AiChatViewModel aiChatViewModel;
 
     public final ActivityResultLauncher<Intent> programInfoLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -178,6 +191,8 @@ public class MainActivity extends BasePermissionAppCompatActivity {
 
             @Override
             public void onDrawerOpened(@NonNull View drawerView) {
+                // Also when swiped open, which doesn't go through openDrawer()
+                syncDrawerContent();
                 closeDrawer.setEnabled(true);
                 getOnBackPressedDispatcher().addCallback(closeDrawer);
             }
@@ -253,6 +268,8 @@ public class MainActivity extends BasePermissionAppCompatActivity {
             return false;
         });
 
+        setupAiDrawer();
+
         if (savedInstanceState != null) {
             projectsFragment = (ProjectsFragment) getSupportFragmentManager().findFragmentByTag(PROJECTS_FRAGMENT_TAG);
             projectsStoreFragment = (ProjectsStoreFragment) getSupportFragmentManager().findFragmentByTag(PROJECTS_STORE_FRAGMENT_TAG);
@@ -312,7 +329,28 @@ public class MainActivity extends BasePermissionAppCompatActivity {
     }
 
     public void openDrawer() {
+        syncDrawerContent();
         binding.drawerLayout.openDrawer(GravityCompat.START);
+    }
+
+    /**
+     * Makes the drawer show what belongs to the current tab: the chat history on the AI tab, the
+     * app menu elsewhere. Done on every opening, so the drawer can't keep showing a stale or
+     * empty panel whatever happened while it was closed.
+     */
+    private void syncDrawerContent() {
+        boolean ai = currentNavItemId == R.id.item_ai;
+        View history = binding.aiDrawer.getRoot();
+        binding.leftDrawer.setVisibility(ai ? View.GONE : View.VISIBLE);
+        history.setVisibility(ai ? View.VISIBLE : View.GONE);
+        if (ai) {
+            history.bringToFront();
+            // Draw what's known right away, then reload it from storage
+            showAiSessions();
+            refreshAiDrawerHistory();
+            history.requestLayout();
+            history.invalidate();
+        }
     }
 
     /**
@@ -334,6 +372,9 @@ public class MainActivity extends BasePermissionAppCompatActivity {
         if (projectsFragment == null) {
             projectsFragment = new ProjectsFragment();
         }
+
+        binding.leftDrawer.setVisibility(View.VISIBLE);
+        binding.aiDrawer.aiDrawerRoot.setVisibility(View.GONE);
 
         boolean shouldShow = true;
         FragmentManager fm = getSupportFragmentManager();
@@ -359,6 +400,9 @@ public class MainActivity extends BasePermissionAppCompatActivity {
             projectsStoreFragment = new ProjectsStoreFragment();
         }
 
+        binding.leftDrawer.setVisibility(View.VISIBLE);
+        binding.aiDrawer.aiDrawerRoot.setVisibility(View.GONE);
+
         boolean shouldShow = true;
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction transaction = fm.beginTransaction();
@@ -382,6 +426,10 @@ public class MainActivity extends BasePermissionAppCompatActivity {
             aiFragment = new AiFragment();
         }
 
+        binding.leftDrawer.setVisibility(View.GONE);
+        binding.aiDrawer.aiDrawerRoot.setVisibility(View.VISIBLE);
+        refreshAiDrawerHistory();
+
         boolean shouldShow = true;
         FragmentManager fm = getSupportFragmentManager();
         FragmentTransaction transaction = fm.beginTransaction();
@@ -397,6 +445,162 @@ public class MainActivity extends BasePermissionAppCompatActivity {
 
         activeFragment = aiFragment;
         currentNavItemId = R.id.item_ai;
+    }
+
+    private void setupAiDrawer() {
+        aiChatViewModel = new ViewModelProvider(this).get(AiChatViewModel.class);
+
+        // A plain View with wrap_content takes all the height it's offered, which pushed the whole
+        // history below the screen; it gets exactly the status bar's height instead
+        View statusBarSpace = binding.aiDrawer.statusBarOverlapper;
+        android.view.ViewGroup.LayoutParams spaceParams = statusBarSpace.getLayoutParams();
+        spaceParams.height = UI.getStatusBarHeight(this);
+        statusBarSpace.setLayoutParams(spaceParams);
+        // Keeps "Clear all history" above the gesture bar
+        UI.addSystemWindowInsetToPadding(binding.aiDrawer.getRoot(), false, false, false, true);
+
+        aiHistoryAdapter = new AiHistoryAdapter(new AiHistoryAdapter.Listener() {
+            @Override
+            public void onSessionClick(@NonNull AiChatSession session) {
+                if (isAiBusy()) {
+                    return;
+                }
+                aiChatViewModel.loadSession(session.getId());
+                binding.drawerLayout.closeDrawer(GravityCompat.START);
+            }
+
+            @Override
+            public void onSessionRename(@NonNull AiChatSession session) {
+                showRenameAiSessionDialog(session);
+            }
+
+            @Override
+            public void onSessionDelete(@NonNull AiChatSession session) {
+                boolean current = session.getId().equals(aiChatViewModel.getCurrentSessionId());
+                if (current && isAiBusy()) {
+                    return;
+                }
+                new MaterialAlertDialogBuilder(MainActivity.this)
+                        .setTitle(R.string.ai_history_delete_session_title)
+                        .setMessage(getString(R.string.ai_history_delete_session_named, session.getTitle()))
+                        .setPositiveButton(R.string.common_word_delete, (dialog, which) -> {
+                            aiChatViewModel.deleteSession(session.getId());
+                            SketchwareUtil.toast(getString(R.string.ai_history_session_deleted));
+                        })
+                        .setNegativeButton(R.string.common_word_cancel, null)
+                        .show();
+            }
+        });
+
+        binding.aiDrawer.recyclerSessions.setAdapter(aiHistoryAdapter);
+
+        binding.aiDrawer.btnNewChat.setOnClickListener(v -> {
+            if (isAiBusy()) {
+                return;
+            }
+            aiChatViewModel.newChat();
+            binding.drawerLayout.closeDrawer(GravityCompat.START);
+        });
+
+        binding.aiDrawer.btnClearAll.setOnClickListener(v -> {
+            if (isAiBusy()) {
+                return;
+            }
+            new MaterialAlertDialogBuilder(MainActivity.this)
+                    .setTitle(R.string.ai_history_clear_confirm_title)
+                    .setMessage(R.string.ai_history_clear_confirm_message)
+                    .setPositiveButton(R.string.ai_history_clear_all, (dialog, which) -> {
+                        aiChatViewModel.clearHistory();
+                        SketchwareUtil.toast(getString(R.string.ai_history_cleared));
+                    })
+                    .setNegativeButton(R.string.common_word_cancel, null)
+                    .show();
+        });
+
+        binding.aiDrawer.search.addTextChangedListener(new BaseTextWatcher() {
+            @Override
+            public void afterTextChanged(Editable s) {
+                aiChatViewModel.searchSessions(s.toString());
+            }
+        });
+
+        // The list follows every save, rename and delete, wherever it happens
+        aiChatViewModel.getSessions().observe(this, sessions -> showAiSessions());
+        aiChatViewModel.getActiveSessionId().observe(this, id -> showAiSessions());
+        aiChatViewModel.getHistoryError().observe(this, message -> {
+            if (message != null) {
+                SketchwareUtil.toastError(message, Toast.LENGTH_LONG);
+                aiChatViewModel.onHistoryErrorShown();
+            }
+        });
+        aiChatViewModel.isSessionsLoading().observe(this, loading ->
+                binding.aiDrawer.loading.setVisibility(Boolean.TRUE.equals(loading) ? View.VISIBLE : View.INVISIBLE));
+    }
+
+    /**
+     * @return Whether the AI is working, in which case the chat can't be switched; tells the user.
+     */
+    private boolean isAiBusy() {
+        if (Boolean.TRUE.equals(aiChatViewModel.isBusy().getValue())) {
+            SketchwareUtil.toast(getString(R.string.ai_history_busy));
+            return true;
+        }
+        return false;
+    }
+
+    private void showAiSessions() {
+        if (aiHistoryAdapter == null || aiChatViewModel == null) {
+            return;
+        }
+        List<AiChatSession> sessions = aiChatViewModel.getSessions().getValue();
+        if (sessions == null) {
+            sessions = List.of();
+        }
+        aiHistoryAdapter.submitList(sessions, aiChatViewModel.getActiveSessionId().getValue());
+        boolean searching = !Helper.getText(binding.aiDrawer.search).trim().isEmpty();
+        boolean empty = sessions.isEmpty();
+        binding.aiDrawer.emptyState.setVisibility(empty ? View.VISIBLE : View.GONE);
+        binding.aiDrawer.emptyTitle.setText(searching ? R.string.ai_history_no_matches_title : R.string.ai_history_empty_title);
+        binding.aiDrawer.emptyMessage.setText(searching ? R.string.ai_history_no_matches_message : R.string.ai_history_empty_message);
+        binding.aiDrawer.recyclerSessions.setVisibility(empty ? View.GONE : View.VISIBLE);
+        binding.aiDrawer.btnClearAll.setVisibility(empty && !searching ? View.GONE : View.VISIBLE);
+    }
+
+    private void showRenameAiSessionDialog(AiChatSession session) {
+        TextInputLayout layout = new TextInputLayout(this);
+        TextInputEditText input = new TextInputEditText(layout.getContext());
+        input.setSingleLine(true);
+        input.setText(session.getTitle());
+        input.setSelectAllOnFocus(true);
+        layout.addView(input);
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        layout.setPadding(padding, padding / 2, padding, 0);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.ai_history_rename_title)
+                .setView(layout)
+                .setPositiveButton(R.string.ai_history_rename, null)
+                .setNegativeButton(R.string.common_word_cancel, null)
+                .create();
+        dialog.setOnShowListener(d -> {
+            input.requestFocus();
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String title = Helper.getText(input).trim();
+                if (title.isEmpty()) {
+                    layout.setError(getString(R.string.ai_history_rename_empty));
+                    return;
+                }
+                aiChatViewModel.renameSession(session.getId(), title);
+                dialog.dismiss();
+            });
+        });
+        dialog.show();
+    }
+
+    private void refreshAiDrawerHistory() {
+        if (aiChatViewModel != null) {
+            aiChatViewModel.refreshSessions();
+        }
     }
 
     @NonNull

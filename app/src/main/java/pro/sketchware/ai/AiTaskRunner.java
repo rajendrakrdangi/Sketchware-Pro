@@ -4,6 +4,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,17 +26,25 @@ public class AiTaskRunner {
      */
     private int generation;
 
+    public <T> void run(@NonNull Task<T> task) {
+        run(task, null);
+    }
+
     /**
      * Must be called on the main thread.
      */
-    public <T> void run(@NonNull Task<T> task, @NonNull Callback<T> callback) {
+    public <T> void run(@NonNull Task<T> task, @Nullable Callback<T> callback) {
         MainThread mainThread = new MainThread(generation);
         executor.execute(() -> {
             try {
                 T result = task.run(mainThread);
-                mainThread.post(() -> callback.onSuccess(result));
+                if (callback != null) {
+                    mainThread.post(() -> callback.onSuccess(result));
+                }
             } catch (Exception e) {
-                mainThread.post(() -> callback.onError(e));
+                if (callback != null) {
+                    mainThread.post(() -> callback.onError(e));
+                }
             }
         });
     }

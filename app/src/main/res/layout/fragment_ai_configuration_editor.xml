@@ -93,6 +93,7 @@
                     android:id="@+id/api_key"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:contentSensitivity="notSensitive"
                     android:imeOptions="actionDone"
                     android:inputType="textPassword"
                     android:maxLines="1" />

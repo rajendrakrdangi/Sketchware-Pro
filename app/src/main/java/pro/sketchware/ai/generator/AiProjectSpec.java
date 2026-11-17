@@ -42,6 +42,75 @@ public class AiProjectSpec {
     public List<ItemLayout> itemLayouts = new ArrayList<>();
 
     /**
+     * Sketchware's own AdMob setup, or null to leave the project's AdMob settings alone.
+     */
+    public Admob admob;
+
+    /**
+     * The model's own short account of what it built or changed, shown to the user.
+     */
+    public String summary;
+
+    /**
+     * What the user can now see and do in the app, in everyday words, for the report.
+     */
+    public List<String> highlights = new ArrayList<>();
+
+    /**
+     * Icons from Sketchware's built-in icon pack, added to the project's images as vector
+     * drawables and used as <code>@drawable/name</code> or <code>R.drawable.name</code>.
+     */
+    public List<Icon> icons = new ArrayList<>();
+
+    /**
+     * Android resource files the AI owns, e.g. rounded backgrounds, colors and menus. Their file
+     * names start with "ai_"; the user's own resource files are never touched.
+     */
+    public List<ResourceFile> resources = new ArrayList<>();
+
+    /**
+     * Read-only: the names of the images the project already has, which layouts and code may use.
+     */
+    public List<String> projectImages = new ArrayList<>();
+
+    /**
+     * Read-only: the user's own resources, as "type/name", e.g. "color/brand_blue".
+     */
+    public List<String> projectResources = new ArrayList<>();
+
+    public static class Icon {
+        /**
+         * The drawable's name in the project, e.g. "ic_add".
+         */
+        public String name;
+        /**
+         * The icon pack's name for it, e.g. "add".
+         */
+        public String icon;
+        /**
+         * baseline, outline, round, sharp or twotone.
+         */
+        public String style;
+        /**
+         * A hex color like #FFFFFF.
+         */
+        public String color;
+    }
+
+    public static class ResourceFile {
+        /**
+         * Folder and file, e.g. "drawable/ai_card_bg.xml".
+         */
+        public String path;
+        public String content;
+    }
+
+    public static class Admob {
+        public boolean enabled;
+        public List<String> testDevices = new ArrayList<>();
+    }
+
+    /**
      * @return Whether this is an answer in words rather than an app.
      */
     public boolean isReply() {
