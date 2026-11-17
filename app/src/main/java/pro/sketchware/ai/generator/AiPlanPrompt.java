@@ -30,6 +30,8 @@ public final class AiPlanPrompt {
             Plan only what Sketchware Pro can build with what it offers; no servers or accounts unless the \
             user asks for them.
 
+            If the app should work in more than one language (the user mentions languages, or it is \
+            clearly for people who speak several), say which in the plan.
             Then decide whether something important is unclear. Ask only questions whose answers really \
             change what you build: at most 4, each with 2-5 short options to tap. Set "multiple" when \
             several options can apply together, and "allowCustom" to let the user type their own answer. \

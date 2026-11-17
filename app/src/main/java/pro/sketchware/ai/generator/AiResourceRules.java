@@ -76,6 +76,7 @@ public final class AiResourceRules {
         spec.projectAssets = nonNull(spec.projectAssets);
         spec.projectSounds = nonNull(spec.projectSounds);
         spec.projectFonts = nonNull(spec.projectFonts);
+        AiStrings.validate(spec);
         validateIcons(spec);
         validateResources(spec);
         validateAssets(spec);
@@ -144,6 +145,10 @@ public final class AiResourceRules {
             if ("values".equals(path.group(1))) {
                 Matcher entry = VALUES_ENTRY.matcher(file.content);
                 while (entry.find()) {
+                    if (entry.group(1).equals("string")) {
+                        throw new AiSpecException("\"" + file.path + "\" declares the text \"" + entry.group(2) + "\". Put the app's texts in "
+                                + "\"strings\" instead (and their translations in \"translations\").");
+                    }
                     if (!entry.group(2).startsWith(AI_PREFIX)) {
                         throw new AiSpecException("In \"" + file.path + "\", the " + entry.group(1) + " \"" + entry.group(2)
                                 + "\" must be named with the prefix \"" + AI_PREFIX + "\", e.g. \"" + AI_PREFIX + entry.group(2)
@@ -237,6 +242,7 @@ public final class AiResourceRules {
         }
         available.get("drawable").addAll(spec.projectImages);
         available.get("raw").addAll(spec.projectSounds);
+        available.get("string").addAll(spec.strings.keySet());
         for (String resource : spec.projectResources) {
             int slash = resource.indexOf('/');
             if (slash > 0 && available.containsKey(resource.substring(0, slash))) {
@@ -339,7 +345,7 @@ public final class AiResourceRules {
                 String hint = switch (type) {
                     case "drawable" -> "Declare it in \"icons\" (an icon from the icon pack) or as \"resources\" file drawable/ai_….xml";
                     case "color" -> "Declare it in a values resource file, e.g. values/ai_colors.xml with <color name=\"ai_…\">, or write the hex color";
-                    case "string" -> "Write the text inline instead";
+                    case "string" -> "Declare it in \"strings\" (names start with ai_), or write the text inline";
                     case "raw" -> "Sounds can't be added by you; use one in \"projectSounds\", or android.media.ToneGenerator for a simple beep";
                     default -> "Declare it as a \"resources\" file " + type + "/ai_….xml";
                 };

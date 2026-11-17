@@ -55,7 +55,9 @@ public final class AiProjectPrompt {
               "icons": [{"name": "ic_add", "icon": "add", "style": "round", "color": "#FFFFFF"}],
               "resources": [{"path": "drawable/ai_card_bg.xml", "content": "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\"><solid android:color=\"#FFFFFF\"/><corners android:radius=\"16dp\"/></shape>"}],
               "javaClasses": [],
-              "assets": []
+              "assets": [],
+              "strings": {},
+              "translations": {}
             }
 
             - summary (required, write it FIRST): 1-3 sentences for someone who can't code, about what the app \
@@ -87,8 +89,9 @@ public final class AiProjectPrompt {
             and unique across ALL layouts of the app. Don't use the IDs root, _fab, _toolbar, \
             _app_bar, _coordinator or _drawer.
             - Dimensions are whole numbers in dp, text sizes in sp. Colors are hex literals like \
-            #212121, or @color/ai_… colors you declare in "resources". Write texts inline. Never \
-            reference @string/, @dimen/, @style/ or ?attr/. @drawable/ may only name your "icons", your \
+            #212121, or @color/ai_… colors you declare in "resources". Write texts inline, except in \
+            an app with several languages (see "Languages"), which uses @string/ai_…. Never reference \
+            @dimen/, @style/ or ?attr/. @drawable/ may only name your "icons", your \
             drawable "resources", or images listed in "projectImages". See "Icons and resource files".
             - A ScrollView has exactly one child.
             - Attribute prefixes are android:, app: (e.g. app:cardCornerRadius) and tools: only.
@@ -167,6 +170,25 @@ public final class AiProjectPrompt {
             You can't add fonts; otherwise use android.graphics.Typeface.DEFAULT_BOLD, SERIF or MONOSPACE.
             - When changing an app, keep its "assets" unless the change replaces them; "projectAssets", \
             "projectSounds" and "projectFonts" are read-only.
+
+            # Languages
+            - An app in one language writes its texts inline, as described above; leave "strings" and \
+            "translations" empty.
+            - An app in more than one language (the user asks for languages, or the plan says so): put \
+            every text the user sees in "strings", {"ai_welcome_title": "Welcome"}, in the default \
+            language, and give every other language in "translations", {"hi": {"ai_welcome_title": \
+            "स्वागत है"}}, with every name translated, written naturally for native speakers. Language \
+            codes: hi, bn, mr, ta, te, gu, pa, ur, es, fr, de, ar, pt-BR, ru, ja, zh, id, tr. The \
+            phone's language picks which texts the app shows.
+            - Then layouts use android:text="@string/ai_welcome_title" and android:hint="@string/ai_…"; \
+            code uses getString(R.string.ai_saved), or for numbers and names a placeholder: \
+            "ai_score": "Score: %1$d" with getString(R.string.ai_score, (int) score). Each translation \
+            keeps the same placeholders. Toasts, dialogs, menu titles and list texts use them too. \
+            Never add app_name.
+            - Names start with ai_, lowercase. Write the texts plainly: apostrophes, quotes and line \
+            breaks are escaped for you.
+            - When changing an app, keep its "strings" and "translations" and update every language \
+            when a text changes or is added.
 
             # Code
             - Every "code" and "onCreate" value is a block of Java statements that gets placed inside \

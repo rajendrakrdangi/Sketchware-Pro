@@ -123,6 +123,24 @@ public final class AiChangeSummary {
         if (!changedResources.isEmpty()) {
             lines.add("Resource files changed: " + names(changedResources));
         }
+        java.util.Set<String> oldLanguages = before == null || before.translations == null
+                ? new java.util.LinkedHashSet<>() : new java.util.LinkedHashSet<>(before.translations.keySet());
+        java.util.Set<String> newLanguages = after.translations == null
+                ? new java.util.LinkedHashSet<>() : new java.util.LinkedHashSet<>(after.translations.keySet());
+        java.util.Set<String> addedLanguages = new java.util.LinkedHashSet<>(newLanguages);
+        addedLanguages.removeAll(oldLanguages);
+        oldLanguages.removeAll(newLanguages);
+        if (!addedLanguages.isEmpty()) {
+            lines.add("Languages added: " + AiStrings.languages(addedLanguages));
+        }
+        if (!oldLanguages.isEmpty()) {
+            lines.add("Languages removed: " + AiStrings.languages(oldLanguages));
+        }
+        int oldTexts = before == null || before.strings == null ? 0 : before.strings.size();
+        int newTexts = after.strings == null ? 0 : after.strings.size();
+        if (oldTexts != newTexts) {
+            lines.add("Texts: " + oldTexts + " → " + newTexts);
+        }
         Map<String, String> oldAssets = new LinkedHashMap<>();
         if (before != null && before.assets != null) {
             for (AiProjectSpec.AssetFile file : before.assets) {

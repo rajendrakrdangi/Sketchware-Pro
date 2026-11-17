@@ -58,6 +58,15 @@ public final class AiProjectFiles {
                         CodeFormatter.formatXml(resource.content)));
             }
         }
+        if (spec.strings != null && !spec.strings.isEmpty()) {
+            files.add(new GeneratedFile("res/values/strings.xml", "Texts (RKD AI's entries)", stringsXml(spec.strings)));
+            if (spec.translations != null) {
+                for (java.util.Map.Entry<String, java.util.Map<String, String>> translation : spec.translations.entrySet()) {
+                    files.add(new GeneratedFile("res/values-" + translation.getKey() + "/strings.xml",
+                            AiStrings.languageName(translation.getKey()) + " texts", stringsXml(translation.getValue())));
+                }
+            }
+        }
         if (spec.assets != null) {
             for (AiProjectSpec.AssetFile asset : spec.assets) {
                 files.add(new GeneratedFile("assets/" + asset.path, "Data file", asset.content));
@@ -77,6 +86,14 @@ public final class AiProjectFiles {
             files.add(new GeneratedFile("Icons", "Icons from the icon pack, in the image manager", icons.toString().trim()));
         }
         return files;
+    }
+
+    private static String stringsXml(java.util.Map<String, String> strings) {
+        StringBuilder xml = new StringBuilder();
+        for (java.util.Map.Entry<String, String> entry : strings.entrySet()) {
+            xml.append(AiStrings.entryXml(entry.getKey(), entry.getValue())).append('\n');
+        }
+        return xml.toString().trim();
     }
 
     /**

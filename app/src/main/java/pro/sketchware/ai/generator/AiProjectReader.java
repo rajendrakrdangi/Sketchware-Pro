@@ -122,6 +122,8 @@ public class AiProjectReader {
         AiJavaClasses.read(sc_id, spec);
         // Data files in the assets: the AI's own to keep or change, the user's to use
         AiProjectAssets.read(sc_id, spec);
+        // Texts and their translations in the project's strings.xml files
+        AiStrings.read(sc_id, spec);
         return new Result(sc_id, spec, unsupported);
     }
 

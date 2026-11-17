@@ -236,7 +236,14 @@ final class AiProjectResources {
                 } else if (type.equals("values")) {
                     Matcher entry = VALUES_ENTRY.matcher(content);
                     while (entry.find()) {
-                        spec.projectResources.add(entry.group(1) + "/" + entry.group(2));
+                        // The AI's own texts are read with their translations, see AiStrings
+                        if (entry.group(1).equals("string") && entry.group(2).startsWith(AiResourceRules.AI_PREFIX)) {
+                            continue;
+                        }
+                        String resource = entry.group(1) + "/" + entry.group(2);
+                        if (!spec.projectResources.contains(resource)) {
+                            spec.projectResources.add(resource);
+                        }
                     }
                 } else {
                     spec.projectResources.add(type.toLowerCase(Locale.ROOT) + "/" + name);

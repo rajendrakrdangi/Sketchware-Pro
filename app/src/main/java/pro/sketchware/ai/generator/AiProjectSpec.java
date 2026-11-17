@@ -105,6 +105,18 @@ public class AiProjectSpec {
      */
     public List<String> projectFonts = new ArrayList<>();
 
+    /**
+     * The app's texts in its default language, by name ("ai_..."), for apps in more than one
+     * language: layouts use <code>@string/name</code> and code <code>getString(R.string.name)</code>.
+     */
+    public java.util.Map<String, String> strings = new java.util.LinkedHashMap<>();
+
+    /**
+     * The same texts in other languages, by language code, e.g. "hi" or "pt-rBR". The phone's
+     * language picks which one the app shows.
+     */
+    public java.util.Map<String, java.util.Map<String, String>> translations = new java.util.LinkedHashMap<>();
+
     public static class AssetFile {
         /**
          * Path inside assets, e.g. "ai_questions.json".

@@ -267,6 +267,8 @@ public final class AiProgressNarrator {
                     case "resources" -> add("Designing shapes, colors and menus");
                     case "javaClasses" -> add("Writing helper classes");
                     case "assets" -> add("Preparing the app's data");
+                    case "strings" -> add("Writing the app's texts");
+                    case "translations" -> add("Translating the app");
                     case "permissions" -> add("Choosing permissions");
                     case "reply" -> add("Writing an answer");
                     default -> {
