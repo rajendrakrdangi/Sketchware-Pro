@@ -37,5 +37,7 @@ public class SketchApplication extends Application {
         super.onCreate();
         ThemeManager.applyTheme(this, ThemeManager.getCurrentTheme(this));
         AnalyticsHelper.logDeviceAbi(this);
+        // Test apps' crashes are remembered even while the logcat reader is closed
+        pro.sketchware.ai.AiLogCollector.start(this);
     }
 }

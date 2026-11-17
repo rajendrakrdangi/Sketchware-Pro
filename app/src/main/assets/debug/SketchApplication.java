@@ -22,6 +22,8 @@ public class SketchApplication extends Application {
                 new Thread.UncaughtExceptionHandler() {
                     @Override
                     public void uncaughtException(Thread thread, Throwable throwable) {
+                        // Also in the device log, so a remote logcat reader sees the crash too
+                        Log.e("SketchwareCrash", Log.getStackTraceString(throwable));
                         Intent intent = new Intent(getApplicationContext(), DebugActivity.class);
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         intent.putExtra("error", Log.getStackTraceString(throwable));

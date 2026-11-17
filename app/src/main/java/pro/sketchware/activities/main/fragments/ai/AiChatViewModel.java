@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 import pro.sketchware.R;
+import pro.sketchware.ai.AiCrashReport;
 import pro.sketchware.ai.AiErrors;
 import pro.sketchware.ai.AiIdentity;
 import pro.sketchware.ai.AiIntentClassifier;
@@ -324,13 +325,42 @@ public class AiChatViewModel extends AndroidViewModel {
     // ---------------------------------------------------------------------------------------
 
     public void send(@NonNull String prompt, @NonNull AiConfiguration configuration) {
+        send(prompt, configuration, null, null);
+    }
+
+    /**
+     * Starts a new chat that fixes a crash of a project: the project is attached and changed, and
+     * the change is compile-checked like any other edit.
+     *
+     * @return False if RKD AI is still busy with another task.
+     */
+    public boolean fixCrash(@NonNull AttachedProject project, @NonNull String crash, @NonNull AiConfiguration configuration) {
+        if (isWorking()) {
+            return false;
+        }
+        newChat();
+        attach(project);
+        // "Fix crash: NullPointerException" says more in the history than the start of the log
+        String headline = AiCrashReport.headline(crash);
+        String exception = headline.replaceFirst(":.*", "");
+        currentSessionTitle = "Fix crash: " + exception.substring(exception.lastIndexOf('.') + 1);
+        // The chat shows what crashed and where; the model gets the whole trace
+        send(AiCrashReport.prompt(crash), configuration, AiIntentClassifier.Intent.EDIT_PROJECT, AiCrashReport.summary(crash));
+        return true;
+    }
+
+    /**
+     * @param shown What the chat shows as the user's message, if not the prompt itself.
+     */
+    private void send(@NonNull String prompt, @NonNull AiConfiguration configuration,
+                      @Nullable AiIntentClassifier.Intent forcedIntent, @Nullable String shown) {
         if (isWorking()) {
             return;
         }
         // A new message replaces an unfinished task; its saved steps are no longer offered
         abandonPendingTask();
         AttachedProject target = attachedProject.getValue();
-        AiIntentClassifier.Intent intent = AiIntentClassifier.classify(prompt, target != null);
+        AiIntentClassifier.Intent intent = forcedIntent != null ? forcedIntent : AiIntentClassifier.classify(prompt, target != null);
         List<AiMessage> history = buildHistory();
         if (currentSessionTitle == null) {
             currentSessionTitle = AiChatTitles.fromMessage(prompt);
@@ -340,7 +370,7 @@ public class AiChatViewModel extends AndroidViewModel {
         boolean usesProject = target != null && (intent.changesFiles()
                 || intent == AiIntentClassifier.Intent.DEBUG || intent == AiIntentClassifier.Intent.ANALYZE);
         AttachedProject context = usesProject ? target : null;
-        add(ChatItem.user(nextId++, prompt, context == null ? null : context.name()));
+        add(ChatItem.user(nextId++, shown != null ? shown : prompt, context == null ? null : context.name()));
 
         if (intent == AiIntentClassifier.Intent.IDENTITY) {
             add(ChatItem.info(nextId++, AiIdentity.CREATOR_ANSWER));

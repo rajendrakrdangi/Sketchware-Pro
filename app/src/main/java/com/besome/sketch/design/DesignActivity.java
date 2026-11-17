@@ -121,6 +121,7 @@ import mod.jbk.util.LogUtil;
 import mod.khaled.logcat.LogReaderActivity;
 import pro.sketchware.R;
 import pro.sketchware.activities.debug.RemoteDebugActivity;
+import pro.sketchware.ai.AiCrashHandoff;
 import pro.sketchware.core.debug.RemoteDebugManager;
 import pro.sketchware.core.debug.RemoteDebugSettings;
 import pro.sketchware.core.debug.RemoteDeviceTarget;
@@ -202,6 +203,18 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
             if (viewTabAdapter != null) {
                 viewTabAdapter.n();
             }
+        }
+    });
+    /**
+     * The logcat reader returns a crash when the user asks RKD AI to fix it: the project is saved
+     * and closed first, so the editor can't overwrite the fix, and the AI tab takes it from there.
+     */
+    private final ActivityResultLauncher<Intent> openLogReader = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+        Intent data = result.getData();
+        String crash = data == null ? null : data.getStringExtra(LogReaderActivity.EXTRA_AI_CRASH);
+        if (result.getResultCode() == RESULT_OK && crash != null && sc_id != null) {
+            AiCrashHandoff.offer(sc_id, crash);
+            saveChangesAndCloseProject();
         }
     });
     private final ActivityResultLauncher<Intent> openViewManager = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -962,7 +975,7 @@ public class DesignActivity extends BaseAppCompatActivity implements View.OnClic
         intent.putExtra("package_name", q.packageName);
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra("sc_id", sc_id);
-        startActivity(intent);
+        openLogReader.launch(intent);
     }
 
     private void toRemoteDebug() {

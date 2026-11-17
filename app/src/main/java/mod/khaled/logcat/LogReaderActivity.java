@@ -31,6 +31,8 @@ import java.util.regex.Pattern;
 
 import mod.hey.studios.util.Helper;
 import pro.sketchware.R;
+import pro.sketchware.ai.AiCrashReport;
+import pro.sketchware.ai.AiLogCollector;
 import pro.sketchware.core.debug.RemoteDebugManager;
 import pro.sketchware.core.debug.RemoteDebugSettings;
 import pro.sketchware.core.debug.RemoteLogBuffer;
@@ -44,6 +46,10 @@ import pro.sketchware.utility.SketchwareUtil;
 
 public class LogReaderActivity extends BaseAppCompatActivity {
     public static final String EXTRA_REMOTE = "remote_logcat";
+    /**
+     * The crash the user wants RKD AI to fix, in the result for the project editor.
+     */
+    public static final String EXTRA_AI_CRASH = "ai_crash";
     private boolean remoteMode, loggerRegistered;
     private String requestedPackage;
     private RemoteDebugManager remoteManager;
@@ -80,6 +86,9 @@ public class LogReaderActivity extends BaseAppCompatActivity {
         }
         binding.logsRecyclerView.setAdapter(new Adapter(new ArrayList<>()));
         binding.topAppBar.getMenu().findItem(R.id.action_remote_capture).setVisible(remoteMode);
+        // Only the project editor opens the reader for a project, and gets the crash back to fix it
+        binding.topAppBar.getMenu().findItem(R.id.action_fix_with_ai).setVisible(getCallingActivity() != null
+                && getIntent().getStringExtra("sc_id") != null);
         binding.topAppBar.getMenu().findItem(R.id.action_auto_scroll).setChecked(autoScroll);
 
         if (!remoteMode) {
@@ -105,6 +114,8 @@ public class LogReaderActivity extends BaseAppCompatActivity {
                 followLatest();
             } else if (id == R.id.action_filter) {
                 showFilterDialog();
+            } else if (id == R.id.action_fix_with_ai) {
+                offerCrashFix();
             } else if (id == R.id.action_export) {
                 exportLogcat(mainList);
             } else if (id == R.id.action_remote_capture && remoteMode) {
@@ -129,6 +140,41 @@ public class LogReaderActivity extends BaseAppCompatActivity {
                 applyFilters();
             }
         });
+    }
+
+    /**
+     * Finds the latest crash of this app in the log and, once the user agrees, hands it back to the
+     * project editor, which saves the project and lets RKD AI fix it.
+     */
+    private void offerCrashFix() {
+        ArrayList<String> logs = new ArrayList<>();
+        for (HashMap<String, Object> log : mainList) {
+            String pkgName = safeGet(log, "pkgName");
+            if (pkgName.isEmpty() || requestedPackage == null || requestedPackage.equals(pkgName)) {
+                logs.add(safeGet(log, "logRaw"));
+            }
+        }
+        String crash = AiCrashReport.extract(logs);
+        if (crash == null && !remoteMode) {
+            // The app may have crashed before this screen was opened
+            crash = AiCrashReport.extract(AiLogCollector.recent(requestedPackage));
+        }
+        if (crash == null) {
+            SketchwareUtil.toast(getString(R.string.ai_crash_none));
+            return;
+        }
+        String found = crash;
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.ai_crash_fix_title)
+                .setMessage(getString(R.string.ai_crash_fix_message, AiCrashReport.headline(found)))
+                .setPositiveButton(R.string.ai_crash_fix_positive, (dialog, which) -> {
+                    Intent result = new Intent();
+                    result.putExtra(EXTRA_AI_CRASH, found);
+                    setResult(RESULT_OK, result);
+                    finish();
+                })
+                .setNegativeButton(R.string.common_word_cancel, null)
+                .show();
     }
 
     void showFilterDialog() {

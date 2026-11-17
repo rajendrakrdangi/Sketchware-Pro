@@ -72,6 +72,12 @@ import pro.sketchware.lib.base.BottomSheetDialogView;
 import pro.sketchware.utility.DataResetter;
 import pro.sketchware.utility.FileUtil;
 import pro.sketchware.utility.SketchwareUtil;
+import a.a.a.lC;
+import a.a.a.yB;
+import java.util.HashMap;
+import pro.sketchware.ai.AiCrashHandoff;
+import pro.sketchware.ai.config.AiConfiguration;
+import pro.sketchware.ai.config.AiConfigurationRepository;
 import pro.sketchware.utility.UI;
 
 public class MainActivity extends BasePermissionAppCompatActivity {
@@ -641,6 +647,37 @@ public class MainActivity extends BasePermissionAppCompatActivity {
         }
     }
 
+    /**
+     * Fixes a crash the user sent from the logcat reader, once the project editor has saved and
+     * closed the project: the AI tab opens with a new chat that has the project attached.
+     */
+    private void startCrashFix() {
+        AiCrashHandoff.Request request = AiCrashHandoff.take();
+        if (request == null) {
+            return;
+        }
+        String name = null;
+        for (HashMap<String, Object> project : lC.a()) {
+            if (request.sc_id().equals(yB.c(project, "sc_id"))) {
+                name = yB.c(project, "my_app_name");
+            }
+        }
+        if (name == null) {
+            SketchwareUtil.toastError(getString(R.string.ai_crash_project_missing));
+            return;
+        }
+        binding.bottomNav.setSelectedItemId(R.id.item_ai);
+        AiConfiguration configuration = new AiConfigurationRepository(this).getSelected();
+        if (configuration == null) {
+            SketchwareUtil.toast(getString(R.string.ai_crash_no_model));
+            return;
+        }
+        AiChatViewModel viewModel = new ViewModelProvider(this).get(AiChatViewModel.class);
+        if (!viewModel.fixCrash(new AiChatViewModel.AttachedProject(request.sc_id(), name), request.crash(), configuration)) {
+            SketchwareUtil.toast(getString(R.string.ai_crash_busy));
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -652,6 +689,7 @@ public class MainActivity extends BasePermissionAppCompatActivity {
         if (isStoragePermissionGranted() && storageAccessDenied != null && storageAccessDenied.isShown()) {
             storageAccessDenied.dismiss();
         }
+        startCrashFix();
         Bundle bundle = new Bundle();
         bundle.putString(FirebaseAnalytics.Param.SCREEN_NAME, "MainActivity");
         bundle.putString(FirebaseAnalytics.Param.SCREEN_CLASS, "MainActivity");

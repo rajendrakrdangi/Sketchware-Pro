@@ -203,4 +203,14 @@
     <string name="ai_editor_test_failed">Test failed: %1$s</string>
     <string name="ai_editor_test_failed_title">The test failed</string>
     <string name="ai_editor_saved">Model saved</string>
+
+    <!-- Fixing a crash from the logcat reader -->
+    <string name="ai_crash_fix_menu">Fix with RKD AI</string>
+    <string name="ai_crash_none">No crash or error in the log yet. Run your app, do what makes it crash, then try again.</string>
+    <string name="ai_crash_fix_title">Fix this crash with RKD AI?</string>
+    <string name="ai_crash_fix_message">RKD AI will read this error together with your project, find the cause and fix it. Your project is saved and closed first.\n\n%1$s</string>
+    <string name="ai_crash_fix_positive">Fix it</string>
+    <string name="ai_crash_busy">RKD AI is still working on another task. Try again when it\'s done.</string>
+    <string name="ai_crash_no_model">Add an AI model first, then use Fix with RKD AI again.</string>
+    <string name="ai_crash_project_missing">This project couldn\'t be found any more.</string>
 </resources>
