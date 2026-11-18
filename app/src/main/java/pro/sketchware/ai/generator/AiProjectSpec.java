@@ -135,6 +135,12 @@ public class AiProjectSpec {
      */
     public List<String> projectJavaClasses = new ArrayList<>();
 
+    /**
+     * The project's own Java files with their code. The model sees them as outlines, reads the ones
+     * it needs, and may change them with "edits" (in "javaFiles/NAME").
+     */
+    public List<JavaClass> projectJavaFiles = new ArrayList<>();
+
     public static class JavaClass {
         /**
          * The class name, e.g. "QuizStore".

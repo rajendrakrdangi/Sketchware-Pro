@@ -124,7 +124,10 @@ public class AiProjectGenerator {
         listener.onProgress(Stage.READING, null);
         AiProjectReader.Result current = reader.read(sc_id);
         List<AiMessage> conversation = new ArrayList<>(history);
-        conversation.add(AiMessage.user(AiProjectPrompt.edit(gson.toJson(current.getSpec()), request, permission)));
+        // Without Sketchware's indentation a big app fits the model; the user's Java files go as
+        // outlines, read when the model asks for them
+        AiSpecPatch.compactLayouts(current.getSpec());
+        conversation.add(AiMessage.user(AiProjectPrompt.edit(AiJavaClasses.promptView(gson.toJson(current.getSpec())), request, permission)));
         AiTaskCheckpoint state = new AiTaskCheckpoint();
         state.permission = permission.name();
         state.patch = true;
@@ -240,7 +243,9 @@ public class AiProjectGenerator {
             listener.onProgress(Stage.ANALYZING, null);
             try {
                 AiProjectReader.Result current = reader.read(sc_id);
-                projectJson = gson.toJson(current.getSpec());
+                // Compact, with the user's Java files as outlines, so a big app fits
+                AiSpecPatch.compactLayouts(current.getSpec());
+                projectJson = AiJavaClasses.promptView(gson.toJson(current.getSpec()));
                 unsupported = current.getUnsupported();
             } catch (AiSpecException e) {
                 // The question can still be answered, just without the project
@@ -313,6 +318,20 @@ public class AiProjectGenerator {
                 listener.onCheckpoint(state.copy(), context.getString(R.string.ai_step_answer, estimateTokens(answer)));
             }
 
+            java.util.List<String> wanted = state.patch && beforeSpec != null ? AiSpecPatch.readRequest(answer) : null;
+            if (wanted != null && state.reads < MAX_READS) {
+                // The model asked to read some of the project's Java files before changing anything
+                conversation.add(AiMessage.assistant(answer));
+                conversation.add(AiMessage.user(AiProjectPrompt.files(beforeSpec.projectJavaFiles, wanted)));
+                state.reads++;
+                state.answer = null;
+                state.setConversation(conversation);
+                listener.onCheckpoint(state.copy(), context.getString(R.string.ai_step_read_files, String.join(", ", wanted)));
+                // Reading isn't a failed attempt
+                attempt--;
+                continue;
+            }
+
             AiProjectSpec spec;
             try {
                 listener.onProgress(Stage.BUILDING, null);
@@ -334,6 +353,12 @@ public class AiProjectGenerator {
                     // Nothing is written until the user has seen and approved every change; the
                     // answer is saved, so approving builds it without asking the model again
                     List<GeneratedFile> proposed = AiProjectFiles.compare(before, AiProjectFiles.describe(spec));
+                    if (proposed.isEmpty()) {
+                        // Nothing would change: an answer in words, not something to approve
+                        String summary = spec.summary == null || spec.summary.isBlank()
+                                ? context.getString(R.string.ai_approval_nothing) : spec.summary.trim();
+                        return Result.reply(summary);
+                    }
                     listener.onCheckpoint(state.copy(), context.getString(R.string.ai_step_approval));
                     return Result.approval(state.target, spec, proposed, AiChangeSummary.describe(beforeSpec, spec));
                 }
@@ -588,6 +613,11 @@ public class AiProjectGenerator {
             onProgress(stage, null);
         }
     }
+
+    /**
+     * How often a change may ask to read the project's Java files first.
+     */
+    private static final int MAX_READS = 2;
 
     public static final class Result {
         private final String sc_id;

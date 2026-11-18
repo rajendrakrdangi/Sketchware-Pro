@@ -91,7 +91,7 @@ public final class AiSpecPatch {
                 case "translations" -> mergeTranslations(app, value);
                 case "removeLanguages" -> removeKeys(app, "translations", value);
                 // The project's own facts are read from it, never taken from an answer
-                case "projectImages", "projectResources", "projectJavaClasses", "projectAssets", "projectSounds", "projectFonts" -> {
+                case "projectImages", "projectResources", "projectJavaClasses", "projectJavaFiles", "projectAssets", "projectSounds", "projectFonts", "read" -> {
                 }
                 default -> app.add(key, value);
             }
@@ -156,6 +156,11 @@ public final class AiSpecPatch {
                 case "javaClasses" -> {
                     return new Target(entry(app, "javaClasses", NAME, parts[1]), "code");
                 }
+                case "javaFiles" -> {
+                    // The project's own Java files, e.g. javaFiles/Money or javaFiles/Money.java
+                    String name = parts[1].endsWith(".java") ? parts[1].substring(0, parts[1].length() - ".java".length()) : parts[1];
+                    return new Target(entry(app, "projectJavaFiles", NAME, name), "code");
+                }
                 case "resources", "assets" -> {
                     return new Target(entry(app, parts[0], PATH, path.substring(parts[0].length() + 1)), "content");
                 }
@@ -174,7 +179,7 @@ public final class AiSpecPatch {
         }
         throw new AiSpecException(where + " is invalid. Use screens/NAME/layout, screens/NAME/onCreate, "
                 + "screens/NAME/events/TARGET/EVENT, screens/NAME/methods/NAME, itemLayouts/NAME, javaClasses/NAME, "
-                + "resources/PATH, assets/PATH or strings/NAME.");
+                + "javaFiles/NAME, resources/PATH, assets/PATH or strings/NAME.");
     }
 
     private static JsonObject entry(JsonObject owner, String key, String[] identity, String... values) throws AiSpecException {
@@ -221,6 +226,63 @@ public final class AiSpecPatch {
 
     private static String shorten(String text) {
         return text.length() <= 80 ? text : text.substring(0, 80) + "…";
+    }
+
+    /**
+     * @return The names of the project's Java files the answer asks to read first, or null if it's
+     * an answer with changes.
+     */
+    @androidx.annotation.Nullable
+    public static java.util.List<String> readRequest(@NonNull String answer) {
+        int start = answer.indexOf('{');
+        int end = answer.lastIndexOf('}');
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        try {
+            JsonElement parsed = JsonParser.parseString(answer.substring(start, end + 1));
+            if (!parsed.isJsonObject() || !parsed.getAsJsonObject().has("read")) {
+                return null;
+            }
+            JsonObject object = parsed.getAsJsonObject();
+            for (String key : object.keySet()) {
+                if (!key.equals("read") && !key.equals("summary")) {
+                    // Changes come with it: the files were read already
+                    return null;
+                }
+            }
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (JsonElement name : asArray(object.get("read"), "read")) {
+                if (name.isJsonPrimitive()) {
+                    String value = name.getAsString().trim();
+                    names.add(value.endsWith(".java") ? value.substring(0, value.length() - ".java".length()) : value);
+                }
+            }
+            return names.isEmpty() ? null : names;
+        } catch (JsonParseException | IllegalStateException | AiSpecException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Makes layouts compact, without the indentation and line breaks Sketchware writes, so a big
+     * app takes far fewer tokens. Layouts are parsed into views when built, so nothing changes.
+     */
+    public static void compactLayouts(@NonNull AiProjectSpec spec) {
+        if (spec.screens != null) {
+            for (AiProjectSpec.Screen screen : spec.screens) {
+                screen.layout = compact(screen.layout);
+            }
+        }
+        if (spec.itemLayouts != null) {
+            for (AiProjectSpec.ItemLayout itemLayout : spec.itemLayouts) {
+                itemLayout.layout = compact(itemLayout.layout);
+            }
+        }
+    }
+
+    private static String compact(String xml) {
+        return xml == null ? null : xml.replaceAll(">\\s+<", "><").replaceAll("\\s*\\r?\\n\\s*", " ").trim();
     }
 
     private static void mergeScreens(JsonObject app, JsonElement value) throws AiSpecException {

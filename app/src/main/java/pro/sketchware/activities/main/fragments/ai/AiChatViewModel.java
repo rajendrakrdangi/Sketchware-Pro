@@ -473,9 +473,9 @@ public class AiChatViewModel extends AndroidViewModel {
             currentSessionTitle = AiChatTitles.fromMessage(prompt);
         }
 
-        // General questions don't need the project; sending it would only fill the context window
-        boolean usesProject = target != null && (intent.changesFiles()
-                || intent == AiIntentClassifier.Intent.DEBUG || intent == AiIntentClassifier.Intent.ANALYZE);
+        // With a project attached, every answer is about it: questions included, so RKD AI
+        // never answers as if it couldn't see the project
+        boolean usesProject = target != null && intent != AiIntentClassifier.Intent.IDENTITY;
         AttachedProject context = usesProject ? target : null;
         add(ChatItem.user(nextId++, shown != null ? shown : prompt, context == null ? null : context.name()));
 

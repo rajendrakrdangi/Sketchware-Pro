@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import pro.sketchware.utility.FilePathUtil;
@@ -116,6 +117,20 @@ public final class AiJavaClasses {
                 }
             }
         }
+        // The user's own files the change edited; untouched ones aren't written at all
+        if (spec.projectJavaFiles != null) {
+            for (AiProjectSpec.JavaClass javaFile : spec.projectJavaFiles) {
+                File file = new File(folder, javaFile.name + ".java");
+                String current = file.isFile() ? readText(file) : null;
+                if (current != null && javaFile.code != null && !current.equals(javaFile.code) && !current.startsWith(MARKER)) {
+                    try {
+                        Files.write(file.toPath(), javaFile.code.getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException e) {
+                        throw new IllegalStateException("Couldn't write " + file.getName(), e);
+                    }
+                }
+            }
+        }
         if (spec.javaClasses.isEmpty()) {
             return;
         }
@@ -148,8 +163,59 @@ public final class AiJavaClasses {
                 spec.javaClasses.add(javaClass);
             } else {
                 spec.projectJavaClasses.add(name);
+                if (content != null) {
+                    // Their code is read, for the model to ask for and change
+                    AiProjectSpec.JavaClass javaFile = new AiProjectSpec.JavaClass();
+                    javaFile.name = name;
+                    javaFile.code = content;
+                    spec.projectJavaFiles.add(javaFile);
+                }
             }
         }
+    }
+
+    private static final Pattern DOC_SENTENCE = Pattern.compile("/\\*\\*\\s*(?:\\*\\s*)?([^*@][^.\\n]*\\.?)");
+    private static final Pattern MEMBER = Pattern.compile(
+            "(?m)^[ \\t]*((?:public|protected|static|final|abstract|synchronized)\\s+[\\w<>\\[\\],.?\\s]*?[\\w>\\]]\\s+\\w+\\s*(?:\\([^)]*\\)|=[^;]{0,400};))");
+
+    /**
+     * @return A short outline of a Java file: what it's for and its members, without their code.
+     */
+    @NonNull
+    static String outline(@NonNull String code) {
+        StringBuilder out = new StringBuilder();
+        Matcher doc = DOC_SENTENCE.matcher(code);
+        if (doc.find()) {
+            out.append(doc.group(1).trim()).append('\n');
+        }
+        Matcher member = MEMBER.matcher(code);
+        int count = 0;
+        while (member.find() && count < 30) {
+            // Long values, such as a big array, are cut; the model reads the file for all of it
+            String line = member.group(1).replaceAll("\\s+", " ").trim();
+            out.append(line.length() > 200 ? line.substring(0, 200) + "…" : line).append('\n');
+            count++;
+        }
+        return out.toString().trim();
+    }
+
+    /**
+     * @return The app's JSON as the model sees it: the user's Java files as outlines, since their
+     * code is only sent when the model asks for it.
+     */
+    @NonNull
+    static String promptView(@NonNull String appJson) {
+        com.google.gson.JsonObject app = com.google.gson.JsonParser.parseString(appJson).getAsJsonObject();
+        if (app.has("projectJavaFiles") && app.get("projectJavaFiles").isJsonArray()) {
+            for (com.google.gson.JsonElement element : app.getAsJsonArray("projectJavaFiles")) {
+                if (element.isJsonObject() && element.getAsJsonObject().has("code")) {
+                    com.google.gson.JsonObject file = element.getAsJsonObject();
+                    file.addProperty("outline", outline(file.get("code").getAsString()));
+                    file.remove("code");
+                }
+            }
+        }
+        return app.toString();
     }
 
     private static boolean isOwn(File file) {

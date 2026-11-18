@@ -168,6 +168,23 @@ public final class AiChangeSummary {
         if (!oldAssets.isEmpty()) {
             lines.add("Data files removed: " + names(new ArrayList<>(oldAssets.keySet())));
         }
+        // The user's own Java files a change edited
+        if (before != null && before.projectJavaFiles != null && after.projectJavaFiles != null) {
+            Map<String, String> oldFiles = new LinkedHashMap<>();
+            for (AiProjectSpec.JavaClass file : before.projectJavaFiles) {
+                oldFiles.put(file.name, file.code);
+            }
+            List<String> changedFiles = new ArrayList<>();
+            for (AiProjectSpec.JavaClass file : after.projectJavaFiles) {
+                String old = oldFiles.get(file.name);
+                if (old != null && file.code != null && !old.equals(file.code)) {
+                    changedFiles.add(file.name + ".java");
+                }
+            }
+            if (!changedFiles.isEmpty()) {
+                lines.add("Your Java files changed: " + names(changedFiles));
+            }
+        }
         Map<String, String> oldClasses = new LinkedHashMap<>();
         if (before != null && before.javaClasses != null) {
             for (AiProjectSpec.JavaClass javaClass : before.javaClasses) {

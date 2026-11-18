@@ -224,6 +224,8 @@
     <string name="ai_approval_apply">Apply</string>
     <string name="ai_approval_discard">Discard</string>
     <string name="ai_approval_discarded">Discarded. Nothing in your app was changed.</string>
+    <string name="ai_approval_nothing">Nothing in the app needs to change for this.</string>
+    <string name="ai_step_read_files">Read your files: %1$s</string>
     <string name="ai_approval_expired">These changes can\'t be applied any more. Ask again to get them.</string>
     <string name="ai_report_suggestion">Idea you could ask for: %1$s</string>
 

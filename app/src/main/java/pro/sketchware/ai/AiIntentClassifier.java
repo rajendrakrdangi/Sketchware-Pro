@@ -61,6 +61,15 @@ public final class AiIntentClassifier {
                     + "|not\\s+working|doesn'?t\\s+work|does\\s+not\\s+work|isn'?t\\s+working|fails?|failed|failing|broken"
                     + "|cannot\\s+resolve|cannot\\s+find\\s+symbol|compile|compiling|build\\s+fail|anr|freez(e|es|ing)|kaam\\s+nahi)\\b");
 
+    /**
+     * Reports that something about the app isn't right yet: "still showing dollar", "the button
+     * didn't change". With a project attached that's a request to fix it, not to explain.
+     */
+    private static final Pattern PROBLEM = Pattern.compile(
+            "\\b(still|again|not\\s+(?:changed?|changing|showing|shown|visible|updated?|updating|applied|saved|loading|appearing)"
+                    + "|(?:doesn'?t|does\\s+not|didn'?t|did\\s+not|isn'?t|is\\s+not|won'?t|wasn'?t)\\s+(?:show|change|update|appear|apply|save|load|work|changed|updated)"
+                    + "|wrong|instead\\s+of|abhi\\s+bhi|ab\\s+bhi|nahi\\s+(?:badla|dikh|aa|chal|hua|ho))\\b");
+
     private static final Pattern ANALYZE = Pattern.compile(
             "\\b(analy[sz]e|analysis|review|audit|inspect|check|explain|overview|summary|summari[sz]e)\\b.*\\b(project|app|code|screen|activity|logic|layout)\\b"
                     + "|\\b(my|this|the)\\s+(project|app)\\b.*\\b(do|does|contain|have|has|work|works|structure)\\b");
@@ -99,6 +108,11 @@ public final class AiIntentClassifier {
             }
             // "Fix this NullPointerException" with no project to fix: explain instead
             return Intent.DEBUG;
+        }
+        if (projectAttached && (debug || PROBLEM.matcher(text).find())) {
+            // A problem in the attached app gets found and fixed, not just explained; in Ask mode
+            // the fix waits for approval anyway
+            return Intent.EDIT_PROJECT;
         }
         if (debug) {
             return Intent.DEBUG;

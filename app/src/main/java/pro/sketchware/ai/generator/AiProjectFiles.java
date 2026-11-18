@@ -67,6 +67,12 @@ public final class AiProjectFiles {
                 }
             }
         }
+        if (spec.projectJavaFiles != null) {
+            // The user's own Java files; only the ones a change edited show up in a comparison
+            for (AiProjectSpec.JavaClass javaFile : spec.projectJavaFiles) {
+                files.add(new GeneratedFile("java/" + javaFile.name + ".java", "Your Java file", javaFile.code));
+            }
+        }
         if (spec.assets != null) {
             for (AiProjectSpec.AssetFile asset : spec.assets) {
                 files.add(new GeneratedFile("assets/" + asset.path, "Data file", asset.content));

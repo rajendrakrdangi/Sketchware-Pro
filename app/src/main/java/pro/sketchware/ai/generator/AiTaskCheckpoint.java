@@ -80,6 +80,10 @@ public class AiTaskCheckpoint {
      * change is built, then the built app, so fixes to it can be just the fixes.
      */
     public String baseSpecJson;
+    /**
+     * How often the model asked to read the project's Java files during this task.
+     */
+    public int reads;
 
     @NonNull
     public List<AiMessage> conversation() {
@@ -127,6 +131,7 @@ public class AiTaskCheckpoint {
         copy.approved = approved;
         copy.patch = patch;
         copy.baseSpecJson = baseSpecJson;
+        copy.reads = reads;
         return copy;
     }
 
