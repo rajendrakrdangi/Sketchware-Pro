@@ -1,3 +1,9 @@
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+
 def secrets = System.getenv("GOOGLE_SERVICES_JSON")
 
 apply plugin: "com.android.application"
@@ -139,3 +145,51 @@ dependencies {
 
 apply from: "$rootDir/gradle/custom-tasks.gradle"
 
+
+// bundletool's jar carries a few classes.dex files as resources (for Play's archived APKs, which
+// Sketchware doesn't build). R8 in AGP 9 refuses archives with both DEX and class files, and no
+// longer has the ignoreDexInArchive switch, so release builds strip those resources first.
+abstract class StripEmbeddedDex implements TransformAction<TransformParameters.None> {
+    @InputArtifact
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    @Override
+    void transform(TransformOutputs outputs) {
+        File input = inputArtifact.get().asFile
+        if (!input.name.startsWith("bundletool-") || !input.name.endsWith(".jar")) {
+            outputs.file(input)
+            return
+        }
+        File output = outputs.file(input.name.replace(".jar", "-nodex.jar"))
+        new java.util.zip.ZipFile(input).withCloseable { zip ->
+            new java.util.zip.ZipOutputStream(new FileOutputStream(output)).withCloseable { out ->
+                zip.entries().each { entry ->
+                    if (!entry.name.endsWith(".dex")) {
+                        out.putNextEntry(new java.util.zip.ZipEntry(entry.name))
+                        if (!entry.directory) {
+                            zip.getInputStream(entry).withCloseable { out << it }
+                        }
+                        out.closeEntry()
+                    }
+                }
+            }
+        }
+    }
+}
+
+def embeddedDexStripped = Attribute.of("sketchware.embeddedDexStripped", Boolean)
+dependencies {
+    attributesSchema {
+        attribute(embeddedDexStripped)
+    }
+    artifactTypes.getByName("jar") {
+        attributes.attribute(embeddedDexStripped, false)
+    }
+    registerTransform(StripEmbeddedDex) {
+        from.attribute(embeddedDexStripped, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+        to.attribute(embeddedDexStripped, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+    }
+}
+configurations.matching { it.name.endsWith("RuntimeClasspath") }.configureEach {
+    attributes.attribute(embeddedDexStripped, true)
+}
