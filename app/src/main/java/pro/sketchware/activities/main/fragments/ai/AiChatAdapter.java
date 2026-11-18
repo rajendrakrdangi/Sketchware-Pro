@@ -288,7 +288,9 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
             } else {
                 report.append(context.getString(R.string.ai_report_check_skipped));
             }
-            if (result.getFiles().isEmpty()) {
+            // Approved changes show their files above, at the review, so only a result with no
+            // changes at all says nothing changed
+            if (result.getFiles().isEmpty() && result.getChanges().isEmpty()) {
                 report.append("\n").append(context.getString(R.string.ai_report_no_changes));
             }
             report.append("\n").append(context.getString(R.string.ai_report_try_it));
