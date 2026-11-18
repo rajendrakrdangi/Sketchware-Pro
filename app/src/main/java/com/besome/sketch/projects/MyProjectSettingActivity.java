@@ -1,7 +1,5 @@
 package com.besome.sketch.projects;
 
-import pro.sketchware.R;
-
 import static mod.hey.studios.util.ProjectFile.getDefaultColor;
 
 import android.content.Context;
@@ -34,6 +32,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -188,7 +187,7 @@ public class MyProjectSettingActivity extends BaseAppCompatActivity implements V
             if (sc_id == null || sc_id.isEmpty()) {
                 sc_id = lC.b();
                 newProjectName = lC.c();
-                newProjectPackageName = "com.my." + newProjectName.toLowerCase();
+                newProjectPackageName = "com.my." + newProjectName.toLowerCase(Locale.ROOT);
             }
             binding.etPackageName.setText(newProjectPackageName);
             binding.etProjectName.setText(newProjectName);
