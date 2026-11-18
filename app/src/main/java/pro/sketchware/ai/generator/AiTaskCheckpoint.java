@@ -63,6 +63,23 @@ public class AiTaskCheckpoint {
      * when resuming.
      */
     public boolean planned;
+    /**
+     * How freely an existing project may be changed, see {@link pro.sketchware.ai.AiEditPermission}.
+     */
+    public String permission;
+    /**
+     * Whether the user approved the answer's changes, for changes that wait for approval.
+     */
+    public boolean approved;
+    /**
+     * Whether answers hold only what changes, see {@link AiSpecPatch}.
+     */
+    public boolean patch;
+    /**
+     * For changes-only answers: the app the next answer changes. The project as it was until a
+     * change is built, then the built app, so fixes to it can be just the fixes.
+     */
+    public String baseSpecJson;
 
     @NonNull
     public List<AiMessage> conversation() {
@@ -106,6 +123,10 @@ public class AiTaskCheckpoint {
         copy.backedUp = backedUp;
         copy.attempt = attempt;
         copy.planned = planned;
+        copy.permission = permission;
+        copy.approved = approved;
+        copy.patch = patch;
+        copy.baseSpecJson = baseSpecJson;
         return copy;
     }
 

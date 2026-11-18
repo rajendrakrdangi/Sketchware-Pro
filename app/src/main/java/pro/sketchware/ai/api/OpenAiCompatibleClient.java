@@ -161,7 +161,14 @@ class OpenAiCompatibleClient implements AiClient {
             return readReply(whole);
         }
         if ("length".equals(finishReason[0])) {
-            throw new AiException("The answer was cut off because it hit the model's output limit. Ask for a smaller app, or pick a model with a larger output limit.");
+            // Reasoning models spend the same output budget on thinking, so say which one used it
+            android.util.Log.w("RkdAi", "Answer cut off after " + text.length() + " characters (thinking "
+                    + thinking[0] + "); it starts: " + text.substring(0, Math.min(600, text.length())));
+            throw new AiException("The answer was cut off because it hit the model's output limit (about "
+                    + (text.length() / 4) + " tokens of answer and " + (thinking[0] / 4) + " tokens of thinking). "
+                    + (thinking[0] > text.length() * 2
+                    ? "This model spent most of it thinking; try again, or pick a model that thinks less."
+                    : "Ask for a smaller change, or pick a model with a larger output limit."));
         }
         if (text.toString().trim().isEmpty()) {
             throw new AiException("The model returned an empty answer.");

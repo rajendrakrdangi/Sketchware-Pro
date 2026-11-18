@@ -187,6 +187,38 @@ public final class ChatItem {
     }
 
     /**
+     * Changes to an existing project that wait for the user's approval.
+     *
+     * @param message  What will change, in Markdown.
+     * @param sc_id    The project they change.
+     * @param decision {@link #DECISION_APPLIED} or {@link #DECISION_DISCARDED}, or null while
+     *                 the user hasn't decided.
+     */
+    @NonNull
+    public static ChatItem approval(long id, @NonNull String message, @NonNull String sc_id, @Nullable String decision) {
+        return new ChatItem(id, Type.APPROVAL, message, sc_id, null, decision, null, null);
+    }
+
+    public static final String DECISION_APPLIED = "applied";
+    public static final String DECISION_DISCARDED = "discarded";
+
+    /**
+     * @return For {@link Type#APPROVAL}: the user's decision, or null while it's open.
+     */
+    @Nullable
+    public String getDecision() {
+        return type == Type.APPROVAL ? stageDetail : null;
+    }
+
+    /**
+     * @return For {@link Type#APPROVAL}: the project the changes are for.
+     */
+    @Nullable
+    public String getApprovalScId() {
+        return type == Type.APPROVAL ? detail : null;
+    }
+
+    /**
      * A step of an AI task that finished, kept in the chat above the step being worked on.
      */
     @NonNull
@@ -286,6 +318,7 @@ public final class ChatItem {
         INFO,
         FILE,
         STEP,
-        QUESTIONS
+        QUESTIONS,
+        APPROVAL
     }
 }

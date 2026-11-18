@@ -30,6 +30,19 @@ public class AiChatSession implements Serializable {
      * Where an unfinished project task stands, for resuming it; null when none is pending.
      */
     private AiTaskCheckpoint pendingTask;
+    /**
+     * {@link pro.sketchware.ai.AiEditPermission} name chosen in this chat; absent means Ask.
+     */
+    private String permission;
+
+    @Nullable
+    public String getPermission() {
+        return permission;
+    }
+
+    public void setPermission(@Nullable String permission) {
+        this.permission = permission;
+    }
 
     @Nullable
     public AiTaskCheckpoint getPendingTask() {

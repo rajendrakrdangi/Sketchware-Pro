@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import pro.sketchware.R;
 import pro.sketchware.ai.AiCrashReport;
+import pro.sketchware.ai.AiEditPermission;
 import pro.sketchware.ai.AiErrors;
 import pro.sketchware.ai.AiIdentity;
 import pro.sketchware.ai.AiIntentClassifier;
@@ -77,6 +78,14 @@ public class AiChatViewModel extends AndroidViewModel {
      * The unfinished project task of this chat, saved after every finished step; null if none.
      */
     private AiTaskCheckpoint pendingTask;
+    /**
+     * How freely RKD AI may change the attached project in this chat; Ask unless chosen otherwise.
+     */
+    private final MutableLiveData<AiEditPermission> permission = new MutableLiveData<>(AiEditPermission.ASK);
+    /**
+     * Set while approved changes are applied: their files were already shown for review.
+     */
+    private boolean applyingApproval;
     private long nextId = 1;
 
     public AiChatViewModel(@NonNull Application application) {
@@ -189,6 +198,7 @@ public class AiChatViewModel extends AndroidViewModel {
 
                     @Override
                     public void onError(@NonNull Exception e) {
+                        applyingApproval = false;
                         refreshSessions();
                     }
                 });
@@ -235,6 +245,101 @@ public class AiChatViewModel extends AndroidViewModel {
         };
     }
 
+    @NonNull
+    public LiveData<AiEditPermission> getPermission() {
+        return permission;
+    }
+
+    @NonNull
+    private AiEditPermission currentPermission() {
+        AiEditPermission value = permission.getValue();
+        return value == null ? AiEditPermission.ASK : value;
+    }
+
+    public void setPermission(@NonNull AiEditPermission value) {
+        permission.setValue(value);
+        if (!items.isEmpty()) {
+            saveSession(null);
+        }
+    }
+
+    /**
+     * Applies changes the user reviewed: the saved answer is built, without asking the model again.
+     */
+    public void approve(long itemId, @NonNull AiConfiguration configuration) {
+        if (isWorking() || !decide(itemId, ChatItem.DECISION_APPLIED)) {
+            return;
+        }
+        if (pendingTask == null || !pendingTask.hasAnswer()) {
+            // Nothing left to apply, e.g. after another message replaced it
+            decide(itemId, ChatItem.DECISION_DISCARDED);
+            add(ChatItem.info(nextId++, getApplication().getString(R.string.ai_approval_expired)));
+            saveSession(null);
+            return;
+        }
+        pendingTask.approved = true;
+        applyingApproval = true;
+        resume(configuration);
+    }
+
+    /**
+     * Drops changes the user reviewed: nothing in the project changes.
+     */
+    public void discard(long itemId) {
+        if (isWorking() || !decide(itemId, ChatItem.DECISION_DISCARDED)) {
+            return;
+        }
+        pendingTask = null;
+        add(ChatItem.info(nextId++, getApplication().getString(R.string.ai_approval_discarded)));
+        saveSession(null);
+    }
+
+    /**
+     * Records the decision on an open approval.
+     *
+     * @return False if there's no open approval with this id.
+     */
+    private boolean decide(long itemId, @NonNull String decision) {
+        for (int i = 0; i < items.size(); i++) {
+            ChatItem item = items.get(i);
+            if (item.getId() == itemId && item.getType() == ChatItem.Type.APPROVAL
+                    && (item.getDecision() == null || ChatItem.DECISION_DISCARDED.equals(decision))) {
+                items.set(i, ChatItem.approval(item.getId(), item.getText() == null ? "" : item.getText(),
+                        item.getApprovalScId() == null ? "" : item.getApprovalScId(), decision));
+                publish();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @return The approval card's text: what will change, in plain words, and the ideas that weren't
+     * applied.
+     */
+    @NonNull
+    private String approvalMessage(@NonNull AiProjectGenerator.Result result) {
+        StringBuilder out = new StringBuilder("**").append(getApplication().getString(R.string.ai_approval_title)).append("**");
+        String summary = result.getSpec().summary;
+        if (summary != null && !summary.isBlank()) {
+            out.append('\n').append(summary.trim());
+        }
+        if (!result.getChanges().isEmpty()) {
+            out.append("\n\n**").append(getApplication().getString(R.string.ai_approval_changes)).append("**");
+            for (String change : result.getChanges()) {
+                out.append("\n- ").append(change);
+            }
+        }
+        if (!result.getSpec().suggestions.isEmpty()) {
+            out.append("\n\n**").append(getApplication().getString(R.string.ai_approval_ideas)).append("**");
+            for (String suggestion : result.getSpec().suggestions) {
+                out.append("\n- ").append(suggestion);
+            }
+        }
+        out.append("\n\n").append(getApplication().getString(R.string.ai_approval_hint));
+        return out.toString();
+    }
+
     /**
      * Clears the chat and detaches the project. The projects themselves stay.
      */
@@ -244,6 +349,7 @@ public class AiChatViewModel extends AndroidViewModel {
         }
         items.clear();
         pendingTask = null;
+        permission.setValue(AiEditPermission.ASK);
         attachedProject.setValue(null);
         currentSessionId = UUID.randomUUID().toString();
         currentSessionTitle = null;
@@ -273,6 +379,7 @@ public class AiChatViewModel extends AndroidViewModel {
                         currentSessionId = session.getId();
                         currentSessionTitle = session.getTitle();
                         pendingTask = session.getPendingTask();
+                        permission.setValue(AiEditPermission.fromName(session.getPermission()));
                         activeSessionId.setValue(currentSessionId);
                         items.clear();
                         items.addAll(restore(session.getItems()));
@@ -400,7 +507,7 @@ public class AiChatViewModel extends AndroidViewModel {
             }
             return target == null
                     ? generator.generate(prompt, history, listener)
-                    : generator.edit(target.sc_id(), prompt, history, listener);
+                    : generator.edit(target.sc_id(), prompt, history, listener, currentPermission());
         });
     }
 
@@ -538,6 +645,15 @@ public class AiChatViewModel extends AndroidViewModel {
                 new AiTaskRunner.Callback<>() {
                     @Override
                     public void onSuccess(AiProjectGenerator.Result result) {
+                        if (result.isApproval()) {
+                            // The saved answer stays the pending task, for Apply
+                            replace(progressId, ChatItem.approval(progressId, approvalMessage(result), result.getScId(), null));
+                            for (GeneratedFile file : result.getFiles()) {
+                                add(ChatItem.file(nextId++, file));
+                            }
+                            finish();
+                            return;
+                        }
                         pendingTask = null;
                         if (result.isQuestions() && result.getPlan() != null) {
                             replace(progressId, ChatItem.questions(progressId, result.getPlan().toJson(), prompt, null));
@@ -554,9 +670,13 @@ public class AiChatViewModel extends AndroidViewModel {
                         if (!result.isUpdate()) {
                             attachedProject.setValue(new AttachedProject(result.getScId(), result.getSpec().appName));
                         }
-                        for (GeneratedFile file : result.getFiles()) {
-                            add(ChatItem.file(nextId++, file));
+                        // Approved changes already showed their files for review
+                        if (!applyingApproval) {
+                            for (GeneratedFile file : result.getFiles()) {
+                                add(ChatItem.file(nextId++, file));
+                            }
                         }
+                        applyingApproval = false;
                         finish();
                     }
 
@@ -588,6 +708,11 @@ public class AiChatViewModel extends AndroidViewModel {
         pendingTask = null;
         for (int i = 0; i < items.size(); i++) {
             ChatItem item = items.get(i);
+            if (item.getType() == ChatItem.Type.APPROVAL && item.getDecision() == null) {
+                // A new message instead of a decision keeps the app as it is
+                items.set(i, ChatItem.approval(item.getId(), item.getText() == null ? "" : item.getText(),
+                        item.getApprovalScId() == null ? "" : item.getApprovalScId(), ChatItem.DECISION_DISCARDED));
+            }
             if (item.getType() == ChatItem.Type.ERROR && item.isResumable()) {
                 items.set(i, ChatItem.error(item.getId(), item.getText() == null ? "" : item.getText(),
                         item.getFailedPrompt() == null ? "" : item.getFailedPrompt(), false));
@@ -715,6 +840,7 @@ public class AiChatViewModel extends AndroidViewModel {
         }
         session.setItems(dtos);
         session.setPendingTask(pendingTask == null ? null : pendingTask.copy());
+        session.setPermission(currentPermission().name());
 
         historyRunner.run(mainThread -> {
             historyManager.saveSession(session);

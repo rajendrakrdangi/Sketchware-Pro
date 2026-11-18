@@ -144,6 +144,13 @@ public class AiResponseParser {
             }
         }
         spec.highlights = highlights;
+        List<String> suggestions = new ArrayList<>();
+        for (String suggestion : nonNull(spec.suggestions)) {
+            if (!isBlank(suggestion) && suggestions.size() < MAX_HIGHLIGHTS) {
+                suggestions.add(suggestion.trim());
+            }
+        }
+        spec.suggestions = suggestions;
         return spec;
     }
 

@@ -117,7 +117,7 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
         ViewBinding binding = switch (ChatItem.Type.values()[viewType]) {
             case USER -> ItemAiChatUserBinding.inflate(inflater, parent, false);
             case FILE -> ItemAiChatFileBinding.inflate(inflater, parent, false);
-            case QUESTIONS -> ItemAiChatQuestionsBinding.inflate(inflater, parent, false);
+            case QUESTIONS, APPROVAL -> ItemAiChatQuestionsBinding.inflate(inflater, parent, false);
             case PROGRESS, RESULT, ERROR, INFO, STEP -> ItemAiChatAssistantBinding.inflate(inflater, parent, false);
         };
         return new Holder(binding);
@@ -135,7 +135,11 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
         } else if (holder.binding instanceof ItemAiChatFileBinding file) {
             bindFile(file, item);
         } else if (holder.binding instanceof ItemAiChatQuestionsBinding questions) {
-            bindQuestions(questions, item);
+            if (item.getType() == ChatItem.Type.APPROVAL) {
+                bindApproval(questions, item);
+            } else {
+                bindQuestions(questions, item);
+            }
         } else {
             bindAssistant(holder, (ItemAiChatAssistantBinding) holder.binding, item);
         }
@@ -424,6 +428,26 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
      * The plan's questions with options to tap and, where allowed, a field for an answer of one's
      * own. Choices are kept in the adapter, so scrolling doesn't lose them.
      */
+    /**
+     * Changes waiting for the user's approval: what will change, then Apply or Discard. The
+     * files with their changes follow as rows of their own.
+     */
+    private void bindApproval(ItemAiChatQuestionsBinding binding, ChatItem item) {
+        Context context = binding.getRoot().getContext();
+        binding.questionsContainer.removeAllViews();
+        String decision = item.getDecision();
+        binding.title.setText(decision == null ? R.string.ai_approval_card_title
+                : ChatItem.DECISION_APPLIED.equals(decision) ? R.string.ai_approval_applied : R.string.ai_approval_card_discarded);
+        binding.answers.setVisibility(View.VISIBLE);
+        binding.answers.setText(CodeSyntaxHighlighter.formatChatText(context, item.getText() == null ? "" : item.getText()));
+        binding.actions.setVisibility(decision == null ? View.VISIBLE : View.GONE);
+        binding.skip.setText(R.string.ai_approval_discard);
+        binding.submit.setText(R.string.ai_approval_apply);
+        long id = item.getId();
+        binding.submit.setOnClickListener(v -> listener.onApproval(id, true));
+        binding.skip.setOnClickListener(v -> listener.onApproval(id, false));
+    }
+
     private void bindQuestions(ItemAiChatQuestionsBinding binding, ChatItem item) {
         Context context = binding.getRoot().getContext();
         AiAppPlan plan = AiAppPlan.fromJson(item.getPlanJson());
@@ -439,6 +463,8 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
         binding.title.setText(R.string.ai_questions_title);
         binding.answers.setVisibility(View.GONE);
         binding.actions.setVisibility(View.VISIBLE);
+        binding.skip.setText(R.string.ai_questions_skip);
+        binding.submit.setText(R.string.ai_questions_submit);
         long id = item.getId();
         Map<Integer, Set<String>> chosen = questionChoices.computeIfAbsent(id, key -> new HashMap<>());
         Map<Integer, String> typed = questionTexts.computeIfAbsent(id, key -> new HashMap<>());
@@ -587,6 +613,11 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
          * @param answers The answers, or null to let RKD AI decide.
          */
         void onAnswerQuestions(long itemId, @Nullable String answers);
+
+        /**
+         * @param apply True to apply the reviewed changes, false to discard them.
+         */
+        void onApproval(long itemId, boolean apply);
     }
 
     static class Holder extends RecyclerView.ViewHolder {

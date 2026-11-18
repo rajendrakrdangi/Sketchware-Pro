@@ -57,6 +57,11 @@ public class AiProjectSpec {
     public List<String> highlights = new ArrayList<>();
 
     /**
+     * Improvements the AI noticed but didn't make, because it may only change what was asked.
+     */
+    public List<String> suggestions = new ArrayList<>();
+
+    /**
      * Icons from Sketchware's built-in icon pack, added to the project's images as vector
      * drawables and used as <code>@drawable/name</code> or <code>R.drawable.name</code>.
      */

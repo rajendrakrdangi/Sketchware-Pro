@@ -28,6 +28,8 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import pro.sketchware.ai.AiEditPermission;
 import com.google.android.material.transition.MaterialFadeThrough;
 
 import com.bumptech.glide.Glide;
@@ -121,6 +123,7 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         viewModel.getItems().observe(getViewLifecycleOwner(), this::showItems);
         viewModel.isBusy().observe(getViewLifecycleOwner(), busy -> updateComposer());
         viewModel.getAttachedProject().observe(getViewLifecycleOwner(), this::showAttachedProject);
+        viewModel.getPermission().observe(getViewLifecycleOwner(), this::showPermission);
         viewModel.getChangedProject().observe(getViewLifecycleOwner(), sc_id -> mainActivity().refreshProjects());
 
         keepComposerVisible();
@@ -291,6 +294,7 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         });
         binding.send.setOnClickListener(v -> send());
         binding.attachProject.setOnClickListener(v -> chooseProject());
+        binding.permission.setOnClickListener(v -> choosePermission());
         binding.attachedProject.setOnCloseIconClickListener(v -> viewModel.attach(null));
     }
 
@@ -321,6 +325,7 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         binding.model.setEnabled(!busy);
         binding.newChat.setEnabled(!busy);
         binding.attachProject.setEnabled(!busy);
+        binding.permission.setEnabled(!busy);
         binding.attachedProject.setCloseIconVisible(!busy);
         // Suggestions start new apps, so they only belong on an empty chat with no project attached
         List<ChatItem> items = viewModel.getItems().getValue();
@@ -334,6 +339,66 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         binding.attachedProject.setText(project == null ? null : project.name());
         binding.prompt.setHint(project == null ? R.string.ai_chat_hint : R.string.ai_chat_hint_edit);
         updateComposer();
+    }
+
+    private static int permissionIcon(AiEditPermission permission) {
+        return switch (permission) {
+            case ASK -> R.drawable.ic_mtrl_shield_lock;
+            case PARTIAL -> R.drawable.ic_mtrl_shield_check;
+            case FULL -> R.drawable.ic_mtrl_verified_user;
+        };
+    }
+
+    private static int permissionName(AiEditPermission permission) {
+        return switch (permission) {
+            case ASK -> R.string.ai_permission_ask;
+            case PARTIAL -> R.string.ai_permission_partial;
+            case FULL -> R.string.ai_permission_full;
+        };
+    }
+
+    private static int permissionSummary(AiEditPermission permission) {
+        return switch (permission) {
+            case ASK -> R.string.ai_permission_ask_summary;
+            case PARTIAL -> R.string.ai_permission_partial_summary;
+            case FULL -> R.string.ai_permission_full_summary;
+        };
+    }
+
+    private void showPermission(@Nullable AiEditPermission permission) {
+        AiEditPermission value = permission == null ? AiEditPermission.ASK : permission;
+        if (binding.permission instanceof com.google.android.material.button.MaterialButton button) {
+            button.setIconResource(permissionIcon(value));
+        }
+        binding.permission.setContentDescription(getString(permissionName(value)));
+    }
+
+    /**
+     * Lets the user choose how freely RKD AI may change the attached project: each choice with
+     * what it means.
+     */
+    private void choosePermission() {
+        AiEditPermission[] choices = AiEditPermission.values();
+        CharSequence[] labels = new CharSequence[choices.length];
+        for (int i = 0; i < choices.length; i++) {
+            String name = getString(permissionName(choices[i]));
+            android.text.SpannableStringBuilder label = new android.text.SpannableStringBuilder(name)
+                    .append('\n').append(getString(permissionSummary(choices[i])));
+            label.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, name.length(), 0);
+            label.setSpan(new android.text.style.RelativeSizeSpan(0.85f), name.length(), label.length(), 0);
+            labels[i] = label;
+        }
+        AiEditPermission current = viewModel.getPermission().getValue();
+        int checked = java.util.Arrays.asList(choices).indexOf(current == null ? AiEditPermission.ASK : current);
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.ai_permission_title)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    viewModel.setPermission(choices[which]);
+                    SketchwareUtil.toast(getString(R.string.ai_permission_set, getString(permissionName(choices[which]))));
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.common_word_cancel, null)
+                .show();
     }
 
     private void chooseProject() {
@@ -507,6 +572,25 @@ public class AiFragment extends Fragment implements AiChatAdapter.Listener {
         }
         hideKeyboard();
         viewModel.answerQuestions(itemId, answers, configuration);
+    }
+
+    @Override
+    public void onApproval(long itemId, boolean apply) {
+        if (!apply) {
+            viewModel.discard(itemId);
+            return;
+        }
+        AiConfiguration configuration = repository.getSelected();
+        if (configuration == null) {
+            openConfiguration();
+            return;
+        }
+        if (!mainActivity().isStoragePermissionGranted()) {
+            SketchwareUtil.toastError(getString(R.string.ai_error_storage));
+            mainActivity().s();
+            return;
+        }
+        viewModel.approve(itemId, configuration);
     }
 
     @Override

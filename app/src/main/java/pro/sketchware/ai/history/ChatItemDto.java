@@ -63,6 +63,8 @@ public class ChatItemDto implements Serializable {
             dto.detail = item.getProjectName();
         } else if (item.getType() == ChatItem.Type.QUESTIONS) {
             dto.detail = item.getQuestionsPrompt();
+        } else if (item.getType() == ChatItem.Type.APPROVAL) {
+            dto.detail = item.getApprovalScId();
         } else if (item.getType() == ChatItem.Type.ERROR) {
             dto.detail = item.getFailedPrompt();
             dto.resumable = item.isResumable();
@@ -122,6 +124,10 @@ public class ChatItemDto implements Serializable {
                     return text == null ? null : ChatItem.step(id, text);
                 case QUESTIONS:
                     return text == null ? null : ChatItem.questions(id, text, detail != null ? detail : "", stageDetail);
+                case APPROVAL:
+                    // A decision that was still open when the app closed can still be made: the
+                    // answer is in the saved task
+                    return text == null || detail == null ? null : ChatItem.approval(id, text, detail, stageDetail);
                 case FILE:
                     if (fileName != null && fileContent != null) {
                         return ChatItem.file(id, new GeneratedFile(fileName,

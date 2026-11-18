@@ -207,6 +207,16 @@
                     android:contentDescription="@string/ai_chat_choose_project"
                     app:icon="@drawable/ic_mtrl_add" />
 
+                <Button
+                    android:id="@+id/permission"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="48dp"
+                    android:paddingHorizontal="12dp"
+                    android:contentDescription="@string/ai_permission_ask"
+                    app:icon="@drawable/ic_mtrl_shield_lock" />
+
                 <EditText
                     android:id="@+id/prompt"
                     android:layout_width="0dp"

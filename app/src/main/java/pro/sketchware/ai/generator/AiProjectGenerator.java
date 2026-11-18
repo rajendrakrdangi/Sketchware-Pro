@@ -13,6 +13,7 @@ import java.util.List;
 
 import mod.jbk.util.LogUtil;
 import pro.sketchware.R;
+import pro.sketchware.ai.AiEditPermission;
 import pro.sketchware.ai.AiIntentClassifier;
 import pro.sketchware.ai.api.AiClient;
 import pro.sketchware.ai.api.AiClientFactory;
@@ -107,11 +108,26 @@ public class AiProjectGenerator {
      */
     @NonNull
     public Result edit(@NonNull String sc_id, @NonNull String request, @NonNull List<AiMessage> history, @NonNull ProgressListener listener) throws AiException, AiSpecException {
+        return edit(sc_id, request, history, listener, AiEditPermission.FULL);
+    }
+
+    /**
+     * Changes an existing project as freely as the user allows.
+     *
+     * @param permission How much besides the request may change; with
+     *                   {@link AiEditPermission#ASK} the changes wait for approval, see
+     *                   {@link Result#isApproval()}.
+     */
+    @NonNull
+    public Result edit(@NonNull String sc_id, @NonNull String request, @NonNull List<AiMessage> history,
+                       @NonNull ProgressListener listener, @NonNull AiEditPermission permission) throws AiException, AiSpecException {
         listener.onProgress(Stage.READING, null);
         AiProjectReader.Result current = reader.read(sc_id);
         List<AiMessage> conversation = new ArrayList<>(history);
-        conversation.add(AiMessage.user(AiProjectPrompt.edit(gson.toJson(current.getSpec()), request)));
+        conversation.add(AiMessage.user(AiProjectPrompt.edit(gson.toJson(current.getSpec()), request, permission)));
         AiTaskCheckpoint state = new AiTaskCheckpoint();
+        state.permission = permission.name();
+        state.patch = true;
         state.prompt = request;
         state.target = sc_id;
         state.update = true;
@@ -300,13 +316,26 @@ public class AiProjectGenerator {
             AiProjectSpec spec;
             try {
                 listener.onProgress(Stage.BUILDING, null);
-                spec = parser.parse(answer, beforeSpec);
+                // A change comes as only what changes, applied to the app here, so nothing
+                // else has to be retyped by the model, or can drift while it is
+                String json = state.patch && answer.indexOf('{') >= 0
+                        ? AiSpecPatch.apply(state.baseSpecJson != null ? state.baseSpecJson : state.beforeSpecJson, answer)
+                        : answer;
+                spec = parser.parse(json, beforeSpec);
                 if (spec.isReply()) {
                     if (lastBuilt != null) {
                         // Gave up fixing the compile errors: what was built is all there is
                         return lastBuilt;
                     }
                     return Result.reply(spec.reply.trim());
+                }
+                if (!state.built && state.update && !state.approved
+                        && state.permission != null && AiEditPermission.fromName(state.permission).needsApproval()) {
+                    // Nothing is written until the user has seen and approved every change; the
+                    // answer is saved, so approving builds it without asking the model again
+                    List<GeneratedFile> proposed = AiProjectFiles.compare(before, AiProjectFiles.describe(spec));
+                    listener.onCheckpoint(state.copy(), context.getString(R.string.ai_step_approval));
+                    return Result.approval(state.target, spec, proposed, AiChangeSummary.describe(beforeSpec, spec));
                 }
                 if (!state.built) {
                     if (state.target == null) {
@@ -321,13 +350,18 @@ public class AiProjectGenerator {
                         builder.update(state.target, spec, listener, backUp);
                     }
                     state.built = true;
+                    if (state.patch) {
+                        // Fixes after this change are changes to the app as built now
+                        state.baseSpecJson = gson.toJson(spec);
+                    }
                     listener.onCheckpoint(state.copy(), context.getString(state.update || attempt > 0
                             ? R.string.ai_step_built_update : R.string.ai_step_built_new, spec.appName, state.target));
                 }
             } catch (AiSpecException e) {
                 lastProblem = e;
                 conversation.add(AiMessage.assistant(answer));
-                conversation.add(AiMessage.user(AiProjectPrompt.repair(e.getMessage())));
+                conversation.add(AiMessage.user(state.patch ? AiProjectPrompt.repairChanges(e.getMessage())
+                        : AiProjectPrompt.repair(e.getMessage())));
                 state.answer = null;
                 state.built = false;
                 state.attempt = attempt + 1;
@@ -341,8 +375,12 @@ public class AiProjectGenerator {
             String compileErrors = outcome.errors;
             List<GeneratedFile> after = AiProjectFiles.describe(spec);
             List<GeneratedFile> files = before.isEmpty() ? after : AiProjectFiles.compare(before, after);
+            List<String> notes = new ArrayList<>(builder.getNotes());
+            for (String suggestion : spec.suggestions) {
+                notes.add(context.getString(R.string.ai_report_suggestion, suggestion));
+            }
             lastBuilt = new Result(state.target, state.update, spec, files, state.unsupported, null, compileErrors, outcome.ran,
-                    AiChangeSummary.describe(beforeSpec, spec), builder.getNotes());
+                    AiChangeSummary.describe(beforeSpec, spec), notes);
             if (compileErrors == null) {
                 return lastBuilt;
             }
@@ -353,7 +391,8 @@ public class AiProjectGenerator {
                         : context.getResources().getQuantityString(R.plurals.ai_stage_fixing_compile_errors, count, count)
                         + (firstError == null ? "" : "\n" + firstError));
                 conversation.add(AiMessage.assistant(answer));
-                conversation.add(AiMessage.user(AiProjectPrompt.repairCompileErrors(compileErrors)));
+                conversation.add(AiMessage.user(state.patch ? AiProjectPrompt.repairCompileErrorsWithChanges(compileErrors)
+                        : AiProjectPrompt.repairCompileErrors(compileErrors)));
                 state.answer = null;
                 state.built = false;
                 state.attempt = attempt + 1;
@@ -650,6 +689,27 @@ public class AiProjectGenerator {
         @Nullable
         public AiAppPlan getPlan() {
             return plan;
+        }
+
+        private boolean approval;
+
+        /**
+         * @return Changes to an existing project that wait for the user's approval; nothing was
+         * written yet.
+         */
+        @NonNull
+        static Result approval(@NonNull String sc_id, @NonNull AiProjectSpec spec, @NonNull List<GeneratedFile> files,
+                               @NonNull List<String> changes) {
+            Result result = new Result(sc_id, true, spec, files, List.of(), null, null, false, changes, List.of());
+            result.approval = true;
+            return result;
+        }
+
+        /**
+         * @return Whether these changes wait for the user's approval before they're applied.
+         */
+        public boolean isApproval() {
+            return approval;
         }
 
         private static Result reply(String reply) {

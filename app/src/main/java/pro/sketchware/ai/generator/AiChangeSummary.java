@@ -62,7 +62,7 @@ public final class AiChangeSummary {
             if (old != null && viewIds(old.layout).equals(viewIds(screen.layout))
                     && !normalize(old.layout).equals(normalize(screen.layout))) {
                 // Same views, different attributes
-                parts.add("layout restyled");
+                parts.add("layout changed");
             }
             compare(parts, "components", components(old), components(screen), old == null);
             compare(parts, "events", events(old), events(screen), old == null);
