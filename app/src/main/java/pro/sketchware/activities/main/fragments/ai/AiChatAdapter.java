@@ -439,7 +439,12 @@ class AiChatAdapter extends ListAdapter<ChatItem, AiChatAdapter.Holder> {
         binding.title.setText(decision == null ? R.string.ai_approval_card_title
                 : ChatItem.DECISION_APPLIED.equals(decision) ? R.string.ai_approval_applied : R.string.ai_approval_card_discarded);
         binding.answers.setVisibility(View.VISIBLE);
-        binding.answers.setText(CodeSyntaxHighlighter.formatChatText(context, item.getText() == null ? "" : item.getText()));
+        String message = item.getText() == null ? "" : item.getText();
+        if (decision != null) {
+            // "Nothing has been changed yet" stops being true once the user decided
+            message = message.replace(context.getString(R.string.ai_approval_hint), "").trim();
+        }
+        binding.answers.setText(CodeSyntaxHighlighter.formatChatText(context, message));
         binding.actions.setVisibility(decision == null ? View.VISIBLE : View.GONE);
         binding.skip.setText(R.string.ai_approval_discard);
         binding.submit.setText(R.string.ai_approval_apply);
